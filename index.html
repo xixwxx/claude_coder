@@ -548,8 +548,8 @@ function update(dt){
     babyT-=dt;
     if(babyT<=0){
       // 아기 클로드: 옆구리에서 장착 무기의 소형 버전 발사 → 레인 중앙으로 수렴(aimX)
-      const offs=[[-18,6],[18,6],[0,13]];
-      for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane));
+      const offs=[[-18,6],[18,6],[0,13]], aimOff=[-8,8,0];
+      for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane)+aimOff[n]);
       babyT=1/(tpsVal()*0.7);
     }
   }
