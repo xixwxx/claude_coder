@@ -516,8 +516,8 @@ function emitProjectile(eq,x,y,scale,aimX){
       bullets.push({x,y,vy:-120,dmg:D(0.75),w:2,h:small?3:5,col:'#85b7eb',chain:small?1:3,aimX:aimX}); break;
     case 'usb': { // 락온 미사일: 가장 앞선 버그 여럿을 각각 조준해 유도 살보
       const tgts=bugs.slice().sort((a,b)=>b.y-a.y).slice(0,small?1:2);
-      if(!tgts.length){ bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:4,col:'#fac775',homing:true}); break; }
-      for(const tg of tgts) bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:4,col:'#fac775',homing:true,target:tg}); break; }
+      if(!tgts.length){ bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:5,col:'#fac775',homing:true,missile:true}); break; }
+      for(const tg of tgts) bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:5,col:'#fac775',homing:true,missile:true,target:tg}); break; }
     case 'fan':
       bullets.push({x,y,vy:-100,dmg:D(0.8),w:2,h:small?3:5,col:'#9fe1cb',chill:true,aimX:aimX}); break;
     case 'pin': // zip 폭탄: 명중 지점 광역 폭발
@@ -665,6 +665,10 @@ function update(dt){
   if(save.lv.agt>0){
     if(save.eq==='duck'){ // 아기도 메인과 똑같이 미니 오리 소환
       babyDuckT-=dt; if(babyDuckT<=0){ for(let n=0;n<save.lv.agt;n++)addDuck(true); babyDuckT=2.6; }
+    }else if(save.eq==='gpu'||save.eq==='cpu'){ // 빔 무기: 아기도 자기 컬럼에 미니 연속빔(메인과 동일 정체성)
+      const boffs=[-18,18,-10,10];
+      for(let n=0;n<save.lv.agt;n++){ const bx2=px+boffs[n];
+        for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; if(Math.abs(b.x-bx2)<6&&b.y<PY-10){ b.hp-=atkDmg()*0.6*dt; if(b.hp<=0)killBug(b,i); } } }
     }else{
       babyT-=dt;
       if(babyT<=0){
@@ -785,6 +789,10 @@ function render(){
       ctx.fillStyle='#378add'; ctx.fillRect(sx-2,sy-1,4,3); ctx.fillStyle='#b0aea5'; ctx.fillRect(sx-3,sy,1,1); ctx.fillRect(sx+2,sy,1,1); } }
   // 플레이어 (본체 12x8 ×2, 바닥)
   drawSprite(ctx,SPR.clawd,Math.round(px-12),Math.round(PY-8),2);
+  // 아기 미니 빔 (gpu/cpu 장착 시 — 메인 빔과 동일 정체성)
+  if(save.lv.agt>0&&(save.eq==='gpu'||save.eq==='cpu')){ const boffs=[-18,18,-10,10];
+    ctx.fillStyle=save.eq==='gpu'?'#6ec3c9':'#f0c674'; ctx.globalAlpha=0.55;
+    for(let n=0;n<save.lv.agt;n++)ctx.fillRect(Math.round(px+boffs[n]-1),HUD,2,PY-HUD-12); ctx.globalAlpha=1; }
   // 아기 클로드 (×1)
   const offs=[[-18,6],[18,6],[-10,13],[10,13]];
   for(let n=0;n<save.lv.agt;n++)
@@ -802,6 +810,7 @@ function render(){
     if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by+5,2,5); ctx.globalAlpha=1; } // 꼬리
     ctx.fillStyle=bl.col;
     if(bl.duckShot){ ctx.fillRect(bx-2,by-1,4,3); ctx.fillStyle='#e08a3c'; ctx.fillRect(bx+2,by,1,1); ctx.fillStyle='#141413'; ctx.fillRect(bx-1,by-1,1,1); } // 미니 오리
+    else if(bl.missile){ ctx.fillRect(bx-1,by-3,2,5); ctx.fillStyle='#fff3d0'; ctx.fillRect(bx-1,by-4,2,1); ctx.fillStyle='#e0663c'; ctx.fillRect(bx-1,by+2,2,3); } // 미사일: 몸체+노즈+화염꼬리
     else if(bl.bomb){ ctx.fillRect(bx-2,by-2,5,5); ctx.fillStyle='#854f0b'; ctx.fillRect(bx-1,by-1,3,1); } // zip 폭탄
     else if(bl.pierce){ ctx.fillRect(bx-1,by-5,2,bl.h+10); }                               // 관통: 긴 창
     else if(bl.homing){ ctx.fillRect(bx-1,by-1,3,3); ctx.fillRect(bx,by-3,1,2); }          // 유도/락온: 머리 달린 다이아
