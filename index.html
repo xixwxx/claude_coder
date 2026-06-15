@@ -171,12 +171,37 @@ const SPR = {
     '#C.##.C#',
     '##.CC.##',
     '.######.']},
-  pin: { p:{'#':'#854f0b','G':'#f0c674'}, g:[
-    '.####.',
-    '#GGGG#',
-    '#G##G#',
-    '#GGGG#',
-    '.####.']},
+  pin: { p:{'#':'#e8c84a','Z':'#5f5e5a'}, g:[
+    '###Z###',
+    '###Z###',
+    '###Z###',
+    '#######',
+    '#######']},
+  tank: { p:{'#':'#b06a4a','E':'#141413'}, g:[
+    '..######..',
+    '.########.',
+    '##E####E##',
+    '##########',
+    '##########',
+    '.########.',
+    '#.#.##.#.#']},
+  zigzag: { p:{'#':'#d4537e','E':'#141413'}, g:[
+    '...##...',
+    '..####..',
+    '.#E##E#.',
+    '.######.',
+    '#.####.#',
+    '#......#']},
+  splitter: { p:{'#':'#7cae3a','E':'#141413'}, g:[
+    '.##..##.',
+    '#E#..#E#',
+    '########',
+    '########',
+    '#.#..#.#']},
+  runt: { p:{'#':'#97c459','E':'#141413'}, g:[
+    '.##.',
+    '####',
+    '#..#']},
 };
 function drawSprite(c, spr, x, y, s){
   const g = spr.g;
@@ -194,7 +219,7 @@ const STATS={
   atk:{name:'추론력',  max:11,cost:n=>Math.round(50*Math.pow(1.6,n))},
   tps:{name:'출력속도',max:8, cost:n=>Math.round(40*Math.pow(1.6,n))},
   ctx:{name:'컨텍스트',max:6, cost:n=>Math.round(80*Math.pow(1.7,n))},
-  agt:{name:'에이전트',max:3, cost:n=>Math.round(200*Math.pow(2.5,n))},
+  agt:{name:'에이전트',max:4, cost:n=>Math.round(200*Math.pow(2.5,n))},
 };
 const WEAPONS={
   stream:{name:'토큰 스트림', desc:'정직한 직선 연사', cost:0,   spr:'token'},
@@ -202,18 +227,22 @@ const WEAPONS={
   duck:  {name:'러버덕 군단', desc:'오리를 소환해 자동 디버깅', cost:300, spr:'duck'},
   pencil:{name:'Pencil 저격펜', desc:'느리지만 한 줄 전체 관통', cost:450, spr:'pencil'},
   pad:   {name:'트랙패드 중력장', desc:'낙하 30% 감속 + 주변 펄스', cost:550, spr:'pad'},
-  cpu:   {name:'오버클럭 CPU', desc:'3.5초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
-  gpu:   {name:'RTX 4090', desc:'3열 평행 광선', cost:800, spr:'gpu'},
-  grep:  {name:'grep 추적기', desc:'가장 가까운 버그를 쫓는 유도탄', cost:500, spr:'grep'},
-  eth:   {name:'Cat8 랜선', desc:'명중 시 옆 버그로 전류 연쇄', cost:650, spr:'eth'},
-  usb:   {name:'USB 허브', desc:'부채꼴 산탄으로 여러 칸 동시 견제', cost:700, spr:'usb'},
+  cpu:   {name:'오버클럭 CPU', desc:'3초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
+  gpu:   {name:'RTX 4090', desc:'선 컬럼에 끊김없는 연속 레이저', cost:800, spr:'gpu'},
+  grep:  {name:'grep 추적기', desc:'화면 전체 위협을 칸 넘어 추적', cost:500, spr:'grep'},
+  eth:   {name:'Cat8 랜선', desc:'명중 시 옆 칸으로 번개 점프', cost:650, spr:'eth'},
+  usb:   {name:'USB 허브', desc:'앞선 버그 자동 조준 유도 미사일', cost:700, spr:'usb'},
   fan:   {name:'쿨링팬 빙결', desc:'맞은 버그 둔화 + 지속 냉각뎀', cost:600, spr:'fan'},
-  pin:   {name:'토큰 핀볼', desc:'벽·버그 튕기는 도탄', cost:750, spr:'pin'},
+  pin:   {name:'zip 폭탄', desc:'명중 지점 광역 폭발', cost:750, spr:'pin'},
 };
 const BUGTYPES={
   bug:     {spr:'bug',     hp:3,  spd:14, reward:2, armor:0},
   fly:     {spr:'fly',     hp:1.5,spd:26, reward:2, armor:0},
   conflict:{spr:'conflict',hp:12, spd:8,  reward:6, armor:2},
+  tank:    {spr:'tank',    hp:30, spd:6,  reward:10,armor:3},
+  zigzag:  {spr:'zigzag',  hp:5,  spd:18, reward:4, armor:0, zig:true},
+  splitter:{spr:'splitter',hp:9,  spd:12, reward:5, armor:0, split:true},
+  runt:    {spr:'runt',    hp:1,  spd:30, reward:1, armor:0},
 };
 
 // ---------- 저장 ----------
@@ -318,7 +347,7 @@ function endRun(reason){
 const menuEl=document.getElementById('menu'), deadEl=document.getElementById('dead');
 function showMenu(){
   state='menu'; BGM.stop(); deadEl.classList.add('hidden');
-  let h='<h1>claude_coder</h1><div class="sub">버그를 막으며 코드를 길게 작성하라</div>'+
+  let h='<h1>claude_coder</h1>'+
     '<div class="tops"><span>★ <b>'+save.stars+'</b></span><span>최고 <b>'+save.best+' LOC</b></span>'+
     '<span>모델 <b>'+MODELS[save.lv.atk]+'</b></span></div>';
   h+='<div class="sec"><h2>무기 — 한 판에 1개 장착</h2><div class="wgrid">';
@@ -419,9 +448,12 @@ function spawnBug(){
   let pool=['bug'];
   if(t>15)pool.push('fly');
   if(t>30){pool.push('conflict'); if(t>60)pool.push('conflict');}
+  if(t>45)pool.push('tank');
+  if(t>75)pool.push('zigzag','zigzag');
+  if(t>100)pool.push('splitter');
   const k=pool[Math.floor(Math.random()*pool.length)], b=BUGTYPES[k];
   bugs.push({k,x:laneX(Math.floor(Math.random()*LANES))+(Math.random()*10-5),y:-20,
-             hp:b.hp*(1+t/40),max:b.hp*(1+t/40),spd:b.spd*(1+t/150)});
+             hp:b.hp*(1+t/40),max:b.hp*(1+t/40),spd:b.spd*(1+t/150),phase:Math.random()*6.28});
 }
 function fireToken(x,y,dmg,small,aimX){
   bullets.push({x,y,vy:-110,dmg,w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674',aimX:aimX});
@@ -447,7 +479,7 @@ function emitProjectile(eq,x,y,scale,aimX){
     case 'pin': // zip 폭탄: 명중 지점 광역 폭발
       bullets.push({x,y,vy:-92,dmg:D(1.05),w:3,h:4,col:'#e8c84a',bomb:true,boomR:small?20:34,aimX:aimX}); break;
     case 'mouse':
-      bullets.push({x,y,vy:-118,dmg:D(0.57),w:2,h:3,col:'#ffcf8f',aimX:aimX}); break;
+      bullets.push({x,y,vy:-118,dmg:D(0.61),w:2,h:3,col:'#ffcf8f',aimX:aimX}); break;
     case 'cpu':
       bullets.push({x,y,vy:-110,dmg:D(0.3),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
     default: // stream
@@ -459,7 +491,7 @@ function weaponRate(eq){
     case 'mouse':return tpsVal()*2.8; case 'pencil':return tpsVal()*0.5;
     case 'gpu':return tpsVal()*0.8; case 'cpu':return tpsVal()*0.4;
     case 'grep':return tpsVal()*0.75; case 'eth':return tpsVal()*0.7;
-    case 'usb':return tpsVal()*0.5; case 'fan':return tpsVal()*0.95;
+    case 'usb':return tpsVal()*0.56; case 'fan':return tpsVal()*0.95;
     case 'pin':return tpsVal()*0.7; default:return tpsVal();
   }
 }
@@ -479,8 +511,11 @@ function explode(x,y,r,dmg){
 }
 // 체인 낙뢰: 명중한 버그 주변으로 전류 연쇄
 function chainArc(src,n,dmg){
-  const near=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=58)
-                 .sort((a,b)=>Math.hypot(a.x-src.x,a.y-src.y)-Math.hypot(b.x-src.x,b.y-src.y));
+  const all=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=72);
+  const byNear=(a,b)=>Math.hypot(a.x-src.x,a.y-src.y)-Math.hypot(b.x-src.x,b.y-src.y);
+  // 옆 칸(가로로 떨어진) 버그 우선 → 번개가 옆으로 튐 (관통과 차별화)
+  const near=all.filter(b=>Math.abs(b.x-src.x)>laneW*0.4).sort(byNear)
+            .concat(all.filter(b=>Math.abs(b.x-src.x)<=laneW*0.4).sort(byNear));
   let from=src;
   for(let k=0;k<Math.min(n,near.length);k++){ const b=near[k];
     zaps.push({x1:from.x,y1:from.y,x2:b.x,y2:b.y,t:0}); from=b;
@@ -489,7 +524,10 @@ function chainArc(src,n,dmg){
 }
 function killBug(b,i){
   bugs.splice(i,1);
-  const r=BUGTYPES[b.k].reward;
+  const bt=BUGTYPES[b.k];
+  if(bt.split){ const rb=BUGTYPES.runt; for(let s=0;s<2;s++)bugs.push({k:'runt',x:b.x+(s?13:-13),y:b.y,
+    hp:rb.hp*(1+t/40),max:rb.hp*(1+t/40),spd:rb.spd*(1+t/150),phase:Math.random()*6.28}); }
+  const r=bt.reward;
   runStars+=r; loc+=3;
   floats.push({x:b.x-6,y:b.y-10,txt:'+'+r,t:0,col:'#f0c674'});
   for(let p=0;p<6;p++)parts.push({x:b.x,y:b.y,vx:Math.random()*60-30,vy:Math.random()*60-30,
@@ -531,7 +569,7 @@ function update(dt){
       waves.push({x:px,y:PY,t:0,maxR:115});
       for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
         if(Math.hypot(b.x-px,b.y-PY)<=115){
-          b.hp-=Math.max(1,Math.round(atkDmg()*0.43));
+          b.hp-=atkDmg()*0.48; // round 제거: 양자화 방지로 매끄러운 밸런스
           b.y=Math.max(-20,b.y-2); // 중력 반발: 위로 살짝 밀어냄
           hit=true; if(b.hp<=0)killBug(b,i); } }
       beep(120,.18,.05,'sine');
@@ -558,7 +596,7 @@ function update(dt){
     babyT-=dt;
     if(babyT<=0){
       // 아기 클로드: 옆구리에서 장착 무기의 소형 버전 발사 → 레인 중앙으로 수렴(aimX)
-      const offs=[[-18,6],[18,6],[0,13]], aimOff=[-8,8,0];
+      const offs=[[-18,6],[18,6],[-10,13],[10,13]], aimOff=[-8,8,-4,4];
       for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane)+aimOff[n]);
       babyT=1/(tpsVal()*0.7);
     }
@@ -570,8 +608,8 @@ function update(dt){
       if(bl.bounce!=null){ if(bl.x<3){bl.x=3;bl.vx=Math.abs(bl.vx);} else if(bl.x>W-3){bl.x=W-3;bl.vx=-Math.abs(bl.vx);} if(bl.y<HUD){bl.y=HUD;bl.vy=Math.abs(bl.vy);} }
     }else if(bl.homing){ let tx=null;
       if(bl.target&&bugs.indexOf(bl.target)>=0){ tx=bl.target.x; }
-      else { let td=1e9; for(const b of bugs){ if(b.y<bl.y){ const d=Math.abs(b.x-bl.x)+Math.abs(b.y-bl.y); if(d<td){td=d;tx=b.x;} } } }
-      if(tx!=null)bl.x+=Math.max(-115*dt,Math.min(115*dt,tx-bl.x));
+      else { let my=-1; for(const b of bugs){ if(b.y<bl.y&&b.y>my){ my=b.y; tx=b.x; } } } // 가장 앞선(칸 무관) 버그 추적
+      if(tx!=null)bl.x+=Math.max(-145*dt,Math.min(145*dt,tx-bl.x));
     }else if(bl.aimX!=null){ bl.x+=(bl.aimX-bl.x)*Math.min(1,dt*9); } // 아기 클로드 탄: 옆 발사 → 레인 중앙 수렴
     if(bl.y<HUD-6||bl.y>H+6||bl.x<-6||bl.x>W+6){ if(bl.bomb)explode(bl.x,Math.max(HUD+4,bl.y),bl.boomR,bl.dmg); bullets.splice(i,1);continue}
     for(let j=bugs.length-1;j>=0;j--){ const b=bugs[j],bt=BUGTYPES[b.k],
@@ -592,6 +630,7 @@ function update(dt){
   const fallMul=save.eq==='pad'?0.68:1;
   for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; let sp=b.spd*fallMul;
     if(b.chill>0){ b.chill-=dt; sp*=0.45; b.hp-=3.0*dt; if(b.hp<=0){ killBug(b,i); continue; } }
+    if(BUGTYPES[b.k].zig){ b.x+=Math.cos(t*4.5+b.phase)*46*dt*(b.chill>0?0.45:1); b.x=Math.max(8,Math.min(W-8,b.x)); }
     b.y+=sp*dt;
     if(b.y>=LINE_Y){ bugs.splice(i,1); hp--; shake=0.3; beep(180,.2,.06,'sawtooth');
       floats.push({x:b.x-4,y:LINE_Y-10,txt:'-1',t:0,col:'#e24b4a'});
@@ -650,7 +689,7 @@ function render(){
   // 플레이어 (본체 12x8 ×2, 바닥)
   drawSprite(ctx,SPR.clawd,Math.round(px-12),Math.round(PY-8),2);
   // 아기 클로드 (×1)
-  const offs=[[-18,6],[18,6],[0,13]];
+  const offs=[[-18,6],[18,6],[-10,13],[10,13]];
   for(let n=0;n<save.lv.agt;n++)
     drawSprite(ctx,SPR.clawd,Math.round(px+offs[n][0]-6),Math.round(PY+offs[n][1]-4),1);
   // 체인 번개선 (Cat8) — 굵은 글로우 + 밝은 코어, 길게 잔상
