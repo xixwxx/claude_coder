@@ -410,13 +410,9 @@ function moveTouch(e){
 
 // ---------- 런 로직 ----------
 function addDuck(){
-  if(ducks.length>=5){ ducks.shift(); }
-  // 오리가 가장 적은 레인에 자동 분산 배치
-  const cnt=new Array(LANES).fill(0);
-  for(const d of ducks)cnt[d.lane]++;
-  let best=0;
-  for(let i=1;i<LANES;i++)if(cnt[i]<cnt[best])best=i;
-  ducks.push({lane:best,x:laneX(best),y:H-64,pt:0});
+  if(ducks.length>=6){ ducks.shift(); }
+  // 플레이어가 선 레인에 소환 → 이동으로 오리 배치를 직접 유도(이동이 의미를 가짐)
+  ducks.push({lane:lane,x:laneX(lane),y:H-64,pt:0,life:7});
   beep(520,.12,.05,'triangle');
 }
 function spawnBug(){
@@ -436,21 +432,20 @@ function emitProjectile(eq,x,y,scale,aimX){
   switch(eq){
     case 'pencil':
       bullets.push({x,y,vy:-150,dmg:D(0.75),w:2,h:small?5:8,col:'#e8e6e3',pierce:true,hit:[],aimX:aimX}); break;
-    case 'gpu':
-      if(small){ bullets.push({x,y,vy:-110,dmg:D(0.72),w:2,h:3,col:'#6ec3c9',aimX:aimX}); }
-      else for(const ox of [-laneW,0,laneW]){ const bx=x+ox; if(bx>4&&bx<W-4)bullets.push({x:bx,y,vy:-110,dmg:D(0.72),w:2,h:4,col:'#6ec3c9'}); }
-      break;
+    case 'gpu': // 아기 RTX: 소형 레이저 볼트 (메인은 연속빔으로 별도 처리)
+      bullets.push({x,y,vy:-150,dmg:D(0.66),w:2,h:4,col:'#6ec3c9',aimX:aimX}); break;
     case 'grep':
       bullets.push({x,y,vy:-95,dmg:D(1.15),w:2,h:small?3:4,col:'#9fd66c',homing:true}); break;
     case 'eth':
-      bullets.push({x,y,vy:-120,dmg:D(0.92),w:2,h:small?3:5,col:'#85b7eb',chain:small?1:3,aimX:aimX}); break;
-    case 'usb': {
-      const f=small?[-95,95]:[-160,-65,65,160];
-      for(const vx of f) bullets.push({x,y,vy:-108,vx:vx,dmg:D(0.79),w:2,h:3,col:'#fac775'}); break; }
+      bullets.push({x,y,vy:-120,dmg:D(0.75),w:2,h:small?3:5,col:'#85b7eb',chain:small?1:3,aimX:aimX}); break;
+    case 'usb': { // 락온 미사일: 가장 앞선 버그 여럿을 각각 조준해 유도 살보
+      const tgts=bugs.slice().sort((a,b)=>b.y-a.y).slice(0,small?1:2);
+      if(!tgts.length){ bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:4,col:'#fac775',homing:true}); break; }
+      for(const tg of tgts) bullets.push({x,y,vy:-115,dmg:D(0.75),w:2,h:4,col:'#fac775',homing:true,target:tg}); break; }
     case 'fan':
       bullets.push({x,y,vy:-100,dmg:D(0.8),w:2,h:small?3:5,col:'#9fe1cb',chill:true,aimX:aimX}); break;
-    case 'pin':
-      bullets.push({x,y,vy:-120,vx:(small?42:62)*(Math.random()<0.5?1:-1),dmg:D(0.78),w:3,h:3,col:'#f0c674',bounce:small?2:3,hit:[],life:4}); break;
+    case 'pin': // zip 폭탄: 명중 지점 광역 폭발
+      bullets.push({x,y,vy:-92,dmg:D(1.05),w:3,h:4,col:'#e8c84a',bomb:true,boomR:small?20:34,aimX:aimX}); break;
     case 'mouse':
       bullets.push({x,y,vy:-118,dmg:D(0.57),w:2,h:3,col:'#ffcf8f',aimX:aimX}); break;
     case 'cpu':
@@ -464,7 +459,7 @@ function weaponRate(eq){
     case 'mouse':return tpsVal()*2.8; case 'pencil':return tpsVal()*0.5;
     case 'gpu':return tpsVal()*0.8; case 'cpu':return tpsVal()*0.4;
     case 'grep':return tpsVal()*0.75; case 'eth':return tpsVal()*0.7;
-    case 'usb':return tpsVal()*0.65; case 'fan':return tpsVal()*0.95;
+    case 'usb':return tpsVal()*0.5; case 'fan':return tpsVal()*0.95;
     case 'pin':return tpsVal()*0.7; default:return tpsVal();
   }
 }
@@ -472,17 +467,24 @@ function weaponRate(eq){
 function babyFire(eq,x,y,aimX){
   if(eq==='pad'){ waves.push({x,y,t:0,maxR:48});
     for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; if(Math.hypot(b.x-x,b.y-y)<=48){ b.hp-=Math.max(1,Math.round(atkDmg()*0.3)); if(b.hp<=0)killBug(b,i); } } return; }
-  if(eq==='duck'){ emitProjectile('stream',x,y,0.5,aimX); return; }
+  if(eq==='duck'){ bullets.push({x,y,vy:-92,dmg:Math.max(1,Math.round(atkDmg()*0.45)),w:2,h:3,col:'#f0c94a',homing:true,duckShot:true}); return; }
   emitProjectile(eq,x,y,0.5,aimX);
+}
+// zip 폭탄 폭발: 반경 내 광역 + 충격파
+function explode(x,y,r,dmg){
+  for(let k=bugs.length-1;k>=0;k--){ const bb=bugs[k]; if(Math.hypot(bb.x-x,bb.y-y)<=r){ bb.hp-=Math.max(1,dmg-BUGTYPES[bb.k].armor); if(bb.hp<=0)killBug(bb,k); } }
+  waves.push({x:x,y:y,t:0,maxR:r});
+  for(let p=0;p<8;p++)parts.push({x:x,y:y,vx:Math.random()*140-70,vy:Math.random()*140-70,t:0,col:'#f0c94a'});
+  beep(150,.18,.05,'sawtooth'); shake=Math.max(shake,0.12);
 }
 // 체인 낙뢰: 명중한 버그 주변으로 전류 연쇄
 function chainArc(src,n,dmg){
-  const near=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=42)
+  const near=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=58)
                  .sort((a,b)=>Math.hypot(a.x-src.x,a.y-src.y)-Math.hypot(b.x-src.x,b.y-src.y));
   let from=src;
   for(let k=0;k<Math.min(n,near.length);k++){ const b=near[k];
     zaps.push({x1:from.x,y1:from.y,x2:b.x,y2:b.y,t:0}); from=b;
-    b.hp-=Math.max(1,Math.round(dmg*0.62)); parts.push({x:b.x,y:b.y,vx:0,vy:0,t:0,col:'#85b7eb'});
+    b.hp-=Math.max(1,Math.round(dmg*0.38)); parts.push({x:b.x,y:b.y,vx:0,vy:0,t:0,col:'#85b7eb'});
     if(b.hp<=0){ const idx=bugs.indexOf(b); if(idx>=0)killBug(b,idx); } }
 }
 function killBug(b,i){
@@ -508,17 +510,19 @@ function update(dt){
   // 발사 (위로) — 무기별 패턴
   const eq=save.eq;
   if(eq==='duck'){
-    duckT+=dt; if(duckT>=3.2){ duckT=0; addDuck(); }
-    for(const d of ducks){ d.pt+=dt;
+    duckT+=dt; if(duckT>=2.0){ duckT=0; addDuck(); }
+    for(let di=ducks.length-1;di>=0;di--){ const d=ducks[di];
+      d.life-=dt; if(d.life<=0){ for(let p=0;p<4;p++)parts.push({x:d.x,y:d.y,vx:Math.random()*40-20,vy:-Math.random()*30,t:0,col:'#f0c94a'}); ducks.splice(di,1); continue; }
+      d.pt+=dt;
       // 오리 사냥 헤엄: 자기 레인에서 가장 내려온 버그를 쫓고, 없으면 제자리로 복귀
       let prey=null;
       for(const b of bugs){ if(Math.abs(b.x-laneX(d.lane))<laneW/2&&(!prey||b.y>prey.y))prey=b; }
       const ty=prey?Math.min(LINE_Y-10,Math.max(HUD+14,prey.y)):H-64;
-      d.y+=Math.max(-45*dt,Math.min(45*dt,ty-d.y));
+      d.y+=Math.max(-50*dt,Math.min(50*dt,ty-d.y));
       d.x=laneX(d.lane)+Math.sin(t*8+d.lane*2)*(prey?2:1);
-      if(d.pt>=0.9){ d.pt=0; let hit=false;
+      if(d.pt>=0.8){ d.pt=0; let hit=false;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
-          if(Math.hypot(b.x-d.x,b.y-d.y)<=33){ b.hp-=atkDmg()*0.40; hit=true; if(b.hp<=0)killBug(b,i); } }
+          if(Math.hypot(b.x-d.x,b.y-d.y)<=38){ b.hp-=atkDmg()*0.66; hit=true; if(b.hp<=0)killBug(b,i); } }
         if(hit){ parts.push({x:d.x,y:d.y,vx:0,vy:-14,t:0,col:'#f0c94a'}); beep(700,.06,.025,'triangle'); }
       } }
   }else if(eq==='pad'){
@@ -533,6 +537,12 @@ function update(dt){
       beep(120,.18,.05,'sine');
       if(hit)beep(420,.06,.025,'triangle');
     }
+  }else if(eq==='gpu'){
+    // RTX 4090: 연속 레이저 — 선 컬럼의 적을 지속 가열(매 프레임 DPS)
+    let on=false;
+    for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
+      if(Math.abs(b.x-px)<laneW/2-2){ b.hp-=atkDmg()*0.9*dt; on=true; if(b.hp<=0)killBug(b,i); } }
+    if(on&&Math.random()<0.25)beep(2400,.02,.006);
   }else{
     fireT-=dt;
     if(fireT<=0){ emitProjectile(eq,px,PY-12,1,null); fireT=1/weaponRate(eq); }
@@ -558,12 +568,16 @@ function update(dt){
     if(bl.life!=null){ bl.life-=dt; if(bl.life<=0){bullets.splice(i,1);continue;} }
     if(bl.vx){ bl.x+=bl.vx*dt;
       if(bl.bounce!=null){ if(bl.x<3){bl.x=3;bl.vx=Math.abs(bl.vx);} else if(bl.x>W-3){bl.x=W-3;bl.vx=-Math.abs(bl.vx);} if(bl.y<HUD){bl.y=HUD;bl.vy=Math.abs(bl.vy);} }
-    }else if(bl.homing){ let tx=null,td=1e9; for(const b of bugs){ if(b.y<bl.y){ const d=Math.abs(b.x-bl.x)+Math.abs(b.y-bl.y); if(d<td){td=d;tx=b.x;} } } if(tx!=null)bl.x+=Math.max(-95*dt,Math.min(95*dt,tx-bl.x));
+    }else if(bl.homing){ let tx=null;
+      if(bl.target&&bugs.indexOf(bl.target)>=0){ tx=bl.target.x; }
+      else { let td=1e9; for(const b of bugs){ if(b.y<bl.y){ const d=Math.abs(b.x-bl.x)+Math.abs(b.y-bl.y); if(d<td){td=d;tx=b.x;} } } }
+      if(tx!=null)bl.x+=Math.max(-115*dt,Math.min(115*dt,tx-bl.x));
     }else if(bl.aimX!=null){ bl.x+=(bl.aimX-bl.x)*Math.min(1,dt*9); } // 아기 클로드 탄: 옆 발사 → 레인 중앙 수렴
-    if(bl.y<HUD-6||bl.y>H+6||bl.x<-6||bl.x>W+6){bullets.splice(i,1);continue}
+    if(bl.y<HUD-6||bl.y>H+6||bl.x<-6||bl.x>W+6){ if(bl.bomb)explode(bl.x,Math.max(HUD+4,bl.y),bl.boomR,bl.dmg); bullets.splice(i,1);continue}
     for(let j=bugs.length-1;j>=0;j--){ const b=bugs[j],bt=BUGTYPES[b.k],
         bw=sprW(SPR[bt.spr],2)/2,bh=sprH(SPR[bt.spr],2)/2;
       if(Math.abs(bl.x-b.x)<bw+bl.w&&Math.abs(bl.y-b.y)<bh+bl.h){
+        if(bl.bomb){ explode(bl.x,bl.y,bl.boomR,bl.dmg); bullets.splice(i,1); break; }
         if(bl.hit){ if(bl.hit.indexOf(b)>=0)continue; bl.hit.push(b); }
         b.hp-=Math.max(1,bl.dmg-bt.armor);
         if(bl.chill)b.chill=Math.max(b.chill||0,1.2);
@@ -586,7 +600,7 @@ function update(dt){
   for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.t+=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.t>0.5)parts.splice(i,1); }
   for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.t+=dt; f.y-=14*dt; if(f.t>0.9)floats.splice(i,1); }
   for(let i=waves.length-1;i>=0;i--){ const w=waves[i]; w.t+=dt; if(w.t>0.3)waves.splice(i,1); }
-  for(let i=zaps.length-1;i>=0;i--){ const z=zaps[i]; z.t+=dt; if(z.t>0.18)zaps.splice(i,1); }
+  for(let i=zaps.length-1;i>=0;i--){ const z=zaps[i]; z.t+=dt; if(z.t>0.35)zaps.splice(i,1); }
   if(shake>0)shake-=dt;
   if(beamT>0)beamT-=dt;
 }
@@ -612,8 +626,8 @@ function render(){
     ctx.beginPath(); ctx.arc(Math.round(w.x),Math.round(w.y),Math.max(2,pr*w.maxR),0,Math.PI*2); ctx.stroke();
     ctx.globalAlpha=1;
   }
-  // 오리
-  for(const d of ducks)drawSprite(ctx,SPR.duck,Math.round(d.x-9),Math.round(d.y-7),2);
+  // 오리 (수명 끝나갈수록 깜빡 페이드)
+  for(const d of ducks){ ctx.globalAlpha=d.life<1.5?Math.max(0.25,d.life/1.5):1; drawSprite(ctx,SPR.duck,Math.round(d.x-9),Math.round(d.y-7),2); ctx.globalAlpha=1; }
   // 버그
   for(const b of bugs){ const s=SPR[BUGTYPES[b.k].spr];
     drawSprite(ctx,s,Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),2);
@@ -630,25 +644,31 @@ function render(){
   if(beamT>0){ ctx.fillStyle='#fff3d0'; ctx.globalAlpha=Math.min(0.85,beamT*4);
     ctx.fillRect(Math.round(px-laneW/2),HUD,Math.round(laneW),PY-HUD-10);
     ctx.fillStyle='#f0c674'; ctx.fillRect(Math.round(px-2),HUD,4,PY-HUD-10); ctx.globalAlpha=1; }
+  // RTX 4090: 연속 레이저 빔 (선 컬럼)
+  if(save.eq==='gpu'){ ctx.globalAlpha=0.16; ctx.fillStyle='#6ec3c9'; ctx.fillRect(Math.round(px-laneW/2+2),HUD,Math.round(laneW-4),PY-HUD-10);
+    ctx.globalAlpha=0.85; ctx.fillRect(Math.round(px-1),HUD,3,PY-HUD-10); ctx.globalAlpha=1; }
   // 플레이어 (본체 12x8 ×2, 바닥)
   drawSprite(ctx,SPR.clawd,Math.round(px-12),Math.round(PY-8),2);
   // 아기 클로드 (×1)
   const offs=[[-18,6],[18,6],[0,13]];
   for(let n=0;n<save.lv.agt;n++)
     drawSprite(ctx,SPR.clawd,Math.round(px+offs[n][0]-6),Math.round(PY+offs[n][1]-4),1);
-  // 체인 번개선 (Cat8)
-  for(const z of zaps){ ctx.globalAlpha=Math.max(0,1-z.t/0.18); ctx.strokeStyle='#b5d4f4'; ctx.lineWidth=1;
-    ctx.beginPath(); ctx.moveTo(Math.round(z.x1),Math.round(z.y1)); ctx.lineTo(Math.round(z.x2),Math.round(z.y2)); ctx.stroke(); ctx.globalAlpha=1; }
+  // 체인 번개선 (Cat8) — 굵은 글로우 + 밝은 코어, 길게 잔상
+  for(const z of zaps){ const a=Math.max(0,1-z.t/0.35), x1=Math.round(z.x1),y1=Math.round(z.y1),x2=Math.round(z.x2),y2=Math.round(z.y2);
+    ctx.globalAlpha=a*0.4; ctx.strokeStyle='#85b7eb'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
+    ctx.globalAlpha=a; ctx.strokeStyle='#dcebff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.globalAlpha=1; }
   // 탄환 — 무기별 시각 정체성
   for(const bl of bullets){ const bx=Math.round(bl.x), by=Math.round(bl.y);
-    if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by-(bl.vy<0?-5:5),2,5); ctx.globalAlpha=1; } // 꼬리
+    if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by+5,2,5); ctx.globalAlpha=1; } // 꼬리
     ctx.fillStyle=bl.col;
-    if(bl.pierce){ ctx.fillRect(bx-1,by-5,2,bl.h+10); }                                  // 관통: 긴 창
-    else if(bl.bounce!=null){ ctx.fillRect(bx-2,by-2,4,4); ctx.fillStyle='#fff3d0'; ctx.fillRect(bx-1,by-1,2,2); } // 핀볼: 둥근 공+하이라이트
-    else if(bl.homing){ ctx.fillRect(bx-1,by-1,3,3); ctx.fillRect(bx,by-3,1,2); }          // 유도: 머리 달린 다이아
+    if(bl.duckShot){ ctx.fillRect(bx-2,by-1,4,3); ctx.fillStyle='#e08a3c'; ctx.fillRect(bx+2,by,1,1); ctx.fillStyle='#141413'; ctx.fillRect(bx-1,by-1,1,1); } // 미니 오리
+    else if(bl.bomb){ ctx.fillRect(bx-2,by-2,5,5); ctx.fillStyle='#854f0b'; ctx.fillRect(bx-1,by-1,3,1); } // zip 폭탄
+    else if(bl.pierce){ ctx.fillRect(bx-1,by-5,2,bl.h+10); }                               // 관통: 긴 창
+    else if(bl.homing){ ctx.fillRect(bx-1,by-1,3,3); ctx.fillRect(bx,by-3,1,2); }          // 유도/락온: 머리 달린 다이아
     else if(bl.chill){ ctx.fillRect(bx-2,by-1,5,2); ctx.fillRect(bx-1,by-2,2,5); ctx.fillStyle='#e1f5ee'; ctx.fillRect(bx,by,1,1); } // 빙결: 눈송이
     else if(bl.chain){ ctx.fillRect(bx-1,by-3,2,7); }                                      // 체인: 길쭉 전기탄
-    else { ctx.fillRect(bx-1,by,bl.w,bl.h); }                                              // 토큰/마우스/CPU/GPU 기본
+    else if(bl.bounce!=null){ ctx.fillRect(bx-2,by-2,4,4); ctx.fillStyle='#fff3d0'; ctx.fillRect(bx-1,by-1,2,2); }
+    else { ctx.fillRect(bx-1,by,bl.w,bl.h); }                                              // 토큰/마우스/CPU 기본
   }
   // 파티클·플로터
   for(const p of parts){ ctx.fillStyle=p.col; ctx.fillRect(Math.round(p.x),Math.round(p.y),2,2); }
