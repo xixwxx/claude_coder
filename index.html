@@ -277,14 +277,14 @@ addEventListener('resize',fit); fit();
 
 // ---------- 게임 상태 ----------
 let state='menu';
-let bugs=[],bullets=[],ducks=[],parts=[],floats=[],waves=[];
+let bugs=[],bullets=[],ducks=[],parts=[],floats=[],waves=[],zaps=[];
 let lane=1,px=laneX(1),hp=0,loc=0,runStars=0,t=0,fireT=0,babyT=0,spawnT=0,duckT=0,shake=0;
 let cpuT=0,padT=0,beamT=0;
 let autoPilot=false,autoT=0; // 임시 기능: AUTO 자동조종 (테스트용 — 추후 통째로 제거 가능)
 
 function startRun(){
   if(state==='play')return;
-  bugs=[];bullets=[];ducks=[];parts=[];floats=[];waves=[];
+  bugs=[];bullets=[];ducks=[];parts=[];floats=[];waves=[];zaps=[];
   lane=1;px=laneX(1);hp=maxHp();loc=0;runStars=0;t=0;fireT=0;babyT=0;spawnT=0.8;duckT=0;shake=0;
   cpuT=0;padT=0;beamT=0;
   if(save.eq==='duck'){ addDuck(); }
@@ -452,7 +452,7 @@ function emitProjectile(eq,x,y,scale,aimX){
     case 'pin':
       bullets.push({x,y,vy:-120,vx:(small?42:62)*(Math.random()<0.5?1:-1),dmg:D(0.78),w:3,h:3,col:'#f0c674',bounce:small?2:3,hit:[],life:4}); break;
     case 'mouse':
-      bullets.push({x,y,vy:-110,dmg:D(0.57),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
+      bullets.push({x,y,vy:-118,dmg:D(0.57),w:2,h:3,col:'#ffcf8f',aimX:aimX}); break;
     case 'cpu':
       bullets.push({x,y,vy:-110,dmg:D(0.3),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
     default: // stream
@@ -479,7 +479,9 @@ function babyFire(eq,x,y,aimX){
 function chainArc(src,n,dmg){
   const near=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=42)
                  .sort((a,b)=>Math.hypot(a.x-src.x,a.y-src.y)-Math.hypot(b.x-src.x,b.y-src.y));
+  let from=src;
   for(let k=0;k<Math.min(n,near.length);k++){ const b=near[k];
+    zaps.push({x1:from.x,y1:from.y,x2:b.x,y2:b.y,t:0}); from=b;
     b.hp-=Math.max(1,Math.round(dmg*0.62)); parts.push({x:b.x,y:b.y,vx:0,vy:0,t:0,col:'#85b7eb'});
     if(b.hp<=0){ const idx=bugs.indexOf(b); if(idx>=0)killBug(b,idx); } }
 }
@@ -535,7 +537,7 @@ function update(dt){
     fireT-=dt;
     if(fireT<=0){ emitProjectile(eq,px,PY-12,1,null); fireT=1/weaponRate(eq); }
     if(eq==='cpu'){ cpuT+=dt;
-      if(cpuT>=3.0){ cpuT=0; beamT=0.15;
+      if(cpuT>=3.0){ cpuT=0; beamT=0.28;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
           if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*4.2; if(b.hp<=0)killBug(b,i); } }
         shake=Math.max(shake,0.15); beep(1240,.15,.05,'sawtooth'); }
@@ -584,6 +586,7 @@ function update(dt){
   for(let i=parts.length-1;i>=0;i--){ const p=parts[i]; p.t+=dt; p.x+=p.vx*dt; p.y+=p.vy*dt; if(p.t>0.5)parts.splice(i,1); }
   for(let i=floats.length-1;i>=0;i--){ const f=floats[i]; f.t+=dt; f.y-=14*dt; if(f.t>0.9)floats.splice(i,1); }
   for(let i=waves.length-1;i>=0;i--){ const w=waves[i]; w.t+=dt; if(w.t>0.3)waves.splice(i,1); }
+  for(let i=zaps.length-1;i>=0;i--){ const z=zaps[i]; z.t+=dt; if(z.t>0.18)zaps.splice(i,1); }
   if(shake>0)shake-=dt;
   if(beamT>0)beamT-=dt;
 }
@@ -614,21 +617,39 @@ function render(){
   // 버그
   for(const b of bugs){ const s=SPR[BUGTYPES[b.k].spr];
     drawSprite(ctx,s,Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),2);
-    if(b.chill>0){ ctx.globalAlpha=0.4; ctx.fillStyle='#9fe1cb'; ctx.fillRect(Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),sprW(s,2),sprH(s,2)); ctx.globalAlpha=1; }
+    if(b.chill>0){ const bx=Math.round(b.x-sprW(s,2)/2),by=Math.round(b.y-sprH(s,2)/2);
+      ctx.globalAlpha=0.5; ctx.fillStyle='#5dcaa5'; ctx.fillRect(bx,by,sprW(s,2),sprH(s,2)); ctx.globalAlpha=1;
+      ctx.strokeStyle='#e1f5ee'; ctx.lineWidth=1; ctx.strokeRect(bx-0.5,by-0.5,sprW(s,2)+1,sprH(s,2)+1); }
     if(b.hp<b.max){ ctx.fillStyle='#141413'; ctx.fillRect(b.x-7,b.y-sprH(s,2)/2-4,14,2);
       ctx.fillStyle='#9fd66c'; ctx.fillRect(b.x-7,b.y-sprH(s,2)/2-4,Math.max(1,14*b.hp/b.max),2); }
   }
-  // CPU 메가빔 플래시
-  if(beamT>0){ ctx.fillStyle='#f0c674'; ctx.globalAlpha=0.55;
-    ctx.fillRect(Math.round(px-laneW/2),HUD,Math.round(laneW),PY-HUD-10); ctx.globalAlpha=1; }
+  // CPU: 차징 게이지(바닥에서 차오름) + 메가빔 플래시
+  if(save.eq==='cpu'){ const ch=Math.min(1,cpuT/3.0);
+    ctx.globalAlpha=0.12+0.45*ch*ch; ctx.fillStyle='#f0c674';
+    const gh=Math.round((PY-HUD-10)*ch); ctx.fillRect(Math.round(px-laneW/2),PY-12-gh,Math.round(laneW),gh); ctx.globalAlpha=1; }
+  if(beamT>0){ ctx.fillStyle='#fff3d0'; ctx.globalAlpha=Math.min(0.85,beamT*4);
+    ctx.fillRect(Math.round(px-laneW/2),HUD,Math.round(laneW),PY-HUD-10);
+    ctx.fillStyle='#f0c674'; ctx.fillRect(Math.round(px-2),HUD,4,PY-HUD-10); ctx.globalAlpha=1; }
   // 플레이어 (본체 12x8 ×2, 바닥)
   drawSprite(ctx,SPR.clawd,Math.round(px-12),Math.round(PY-8),2);
   // 아기 클로드 (×1)
   const offs=[[-18,6],[18,6],[0,13]];
   for(let n=0;n<save.lv.agt;n++)
     drawSprite(ctx,SPR.clawd,Math.round(px+offs[n][0]-6),Math.round(PY+offs[n][1]-4),1);
-  // 탄환
-  for(const bl of bullets){ ctx.fillStyle=bl.col; ctx.fillRect(Math.round(bl.x-1),Math.round(bl.y),bl.w,bl.h); }
+  // 체인 번개선 (Cat8)
+  for(const z of zaps){ ctx.globalAlpha=Math.max(0,1-z.t/0.18); ctx.strokeStyle='#b5d4f4'; ctx.lineWidth=1;
+    ctx.beginPath(); ctx.moveTo(Math.round(z.x1),Math.round(z.y1)); ctx.lineTo(Math.round(z.x2),Math.round(z.y2)); ctx.stroke(); ctx.globalAlpha=1; }
+  // 탄환 — 무기별 시각 정체성
+  for(const bl of bullets){ const bx=Math.round(bl.x), by=Math.round(bl.y);
+    if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by-(bl.vy<0?-5:5),2,5); ctx.globalAlpha=1; } // 꼬리
+    ctx.fillStyle=bl.col;
+    if(bl.pierce){ ctx.fillRect(bx-1,by-5,2,bl.h+10); }                                  // 관통: 긴 창
+    else if(bl.bounce!=null){ ctx.fillRect(bx-2,by-2,4,4); ctx.fillStyle='#fff3d0'; ctx.fillRect(bx-1,by-1,2,2); } // 핀볼: 둥근 공+하이라이트
+    else if(bl.homing){ ctx.fillRect(bx-1,by-1,3,3); ctx.fillRect(bx,by-3,1,2); }          // 유도: 머리 달린 다이아
+    else if(bl.chill){ ctx.fillRect(bx-2,by-1,5,2); ctx.fillRect(bx-1,by-2,2,5); ctx.fillStyle='#e1f5ee'; ctx.fillRect(bx,by,1,1); } // 빙결: 눈송이
+    else if(bl.chain){ ctx.fillRect(bx-1,by-3,2,7); }                                      // 체인: 길쭉 전기탄
+    else { ctx.fillRect(bx-1,by,bl.w,bl.h); }                                              // 토큰/마우스/CPU/GPU 기본
+  }
   // 파티클·플로터
   for(const p of parts){ ctx.fillStyle=p.col; ctx.fillRect(Math.round(p.x),Math.round(p.y),2,2); }
   ctx.font='8px Galmuri9,monospace'; ctx.textBaseline='top';
@@ -700,7 +721,7 @@ showMenu();
 
 // 테스트/디버그 핸들
 window.G={get state(){return state},get hp(){return hp},set hp(v){hp=v},get bugs(){return bugs},
-  get ducks(){return ducks},get waves(){return waves},get bullets(){return bullets},
+  get ducks(){return ducks},get waves(){return waves},get bullets(){return bullets},get zaps(){return zaps},
   get loc(){return loc},get runStars(){return runStars},set runStars(v){runStars=v},
   get save(){return save},get lane(){return lane},get t(){return t},get px(){return px},
   get timeScale(){return timeScale},set timeScale(v){timeScale=v},
