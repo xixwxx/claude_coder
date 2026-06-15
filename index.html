@@ -387,8 +387,8 @@ function spawnBug(){
   bugs.push({k,x:laneX(Math.floor(Math.random()*LANES))+(Math.random()*10-5),y:-20,
              hp:b.hp*(1+t/40),max:b.hp*(1+t/40),spd:b.spd*(1+t/150)});
 }
-function fireToken(x,y,dmg,small){
-  bullets.push({x,y,vy:-110,dmg,w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674'});
+function fireToken(x,y,dmg,small,aimX){
+  bullets.push({x,y,vy:-110,dmg,w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674',aimX:aimX});
 }
 function killBug(b,i){
   bugs.splice(i,1);
@@ -463,13 +463,15 @@ function update(dt){
   if(save.lv.agt>0){
     babyT-=dt;
     if(babyT<=0){
+      // 아기 클로드 옆구리에서 발사 → 레인 중앙으로 휘어 들어가 명중 (aimX 수렴)
       const offs=[[-18,6],[18,6],[0,13]];
-      for(let n=0;n<save.lv.agt;n++) fireToken(px+offs[n][0],PY+offs[n][1]-8,Math.max(1,Math.floor(atkDmg()*0.5)),true);
+      for(let n=0;n<save.lv.agt;n++) fireToken(px+offs[n][0],PY+offs[n][1]-8,Math.max(1,Math.floor(atkDmg()*0.5)),true,laneX(lane));
       babyT=1/(tpsVal()*0.6);
     }
   }
   // 탄환 (위로 비행)
   for(let i=bullets.length-1;i>=0;i--){ const bl=bullets[i]; bl.y+=bl.vy*dt;
+    if(bl.aimX!=null){ bl.x+=(bl.aimX-bl.x)*Math.min(1,dt*9); } // 아기 클로드 탄: 옆에서 발사 → 레인 중앙으로 수렴
     if(bl.y<HUD-6){bullets.splice(i,1);continue}
     for(let j=bugs.length-1;j>=0;j--){ const b=bugs[j],bt=BUGTYPES[b.k],
         bw=sprW(SPR[bt.spr],2)/2,bh=sprH(SPR[bt.spr],2)/2;
@@ -608,7 +610,7 @@ showMenu();
 
 // 테스트/디버그 핸들
 window.G={get state(){return state},get hp(){return hp},set hp(v){hp=v},get bugs(){return bugs},
-  get ducks(){return ducks},get waves(){return waves},
+  get ducks(){return ducks},get waves(){return waves},get bullets(){return bullets},
   get loc(){return loc},get runStars(){return runStars},set runStars(v){runStars=v},
   get save(){return save},get lane(){return lane},get t(){return t},get px(){return px},
   get timeScale(){return timeScale},set timeScale(v){timeScale=v},
