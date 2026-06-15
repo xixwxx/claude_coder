@@ -142,6 +142,41 @@ const SPR = {
     '#TTTTTTTT#',
     '#TTT##TTT#',
     '##########']},
+  grep: { p:{'#':'#c0dd97','H':'#639922'}, g:[
+    '.####..',
+    '#....#.',
+    '#....#.',
+    '#....#.',
+    '.####..',
+    '....#H.',
+    '.....HH']},
+  eth: { p:{'#':'#85b7eb','M':'#185fa5'}, g:[
+    '..####..',
+    '.######.',
+    '########',
+    '#M#MM#M#',
+    '########',
+    '.#....#.']},
+  usb: { p:{'#':'#8a8884','P':'#378add'}, g:[
+    '##########',
+    '#P..P..P.#',
+    '#P..P..P.#',
+    '##########',
+    '....##....',
+    '....##....']},
+  fan: { p:{'#':'#9fe1cb','C':'#1d9e75'}, g:[
+    '.######.',
+    '##.CC.##',
+    '#C.##.C#',
+    '#C.##.C#',
+    '##.CC.##',
+    '.######.']},
+  pin: { p:{'#':'#854f0b','G':'#f0c674'}, g:[
+    '.####.',
+    '#GGGG#',
+    '#G##G#',
+    '#GGGG#',
+    '.####.']},
 };
 function drawSprite(c, spr, x, y, s){
   const g = spr.g;
@@ -169,6 +204,11 @@ const WEAPONS={
   pad:   {name:'트랙패드 중력장', desc:'낙하 30% 감속 + 주변 펄스', cost:550, spr:'pad'},
   cpu:   {name:'오버클럭 CPU', desc:'3.5초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
   gpu:   {name:'RTX 4090', desc:'3열 평행 광선', cost:800, spr:'gpu'},
+  grep:  {name:'grep 추적기', desc:'가장 가까운 버그를 쫓는 유도탄', cost:500, spr:'grep'},
+  eth:   {name:'Cat8 랜선', desc:'명중 시 옆 버그로 전류 연쇄', cost:650, spr:'eth'},
+  usb:   {name:'USB 허브', desc:'부채꼴 산탄으로 여러 칸 동시 견제', cost:700, spr:'usb'},
+  fan:   {name:'쿨링팬 빙결', desc:'맞은 버그 둔화 + 지속 냉각뎀', cost:600, spr:'fan'},
+  pin:   {name:'토큰 핀볼', desc:'벽·버그 튕기는 도탄', cost:750, spr:'pin'},
 };
 const BUGTYPES={
   bug:     {spr:'bug',     hp:3,  spd:14, reward:2, armor:0},
@@ -220,7 +260,7 @@ const BGM={on:false,next:0,step:0,
 };
 
 // ---------- 캔버스 (세로형: 버그는 위에서 낙하, 클로드는 바닥 좌우 이동) ----------
-const W=240,H=270,HUD=18,LANES=4;
+const W=240,H=270,HUD=18,LANES=5;
 const laneW=W/LANES;
 const laneX=i=>laneW*(i+0.5);
 const PY=H-22, LINE_Y=H-40;
@@ -247,7 +287,7 @@ function startRun(){
   bugs=[];bullets=[];ducks=[];parts=[];floats=[];waves=[];
   lane=1;px=laneX(1);hp=maxHp();loc=0;runStars=0;t=0;fireT=0;babyT=0;spawnT=0.8;duckT=0;shake=0;
   cpuT=0;padT=0;beamT=0;
-  if(save.eq==='duck') addDuck();
+  if(save.eq==='duck'){ addDuck(); }
   state='play';
   menuEl.classList.add('hidden'); deadEl.classList.add('hidden');
   BGM.start();
@@ -370,7 +410,7 @@ function moveTouch(e){
 
 // ---------- 런 로직 ----------
 function addDuck(){
-  if(ducks.length>=4){ ducks.shift(); }
+  if(ducks.length>=5){ ducks.shift(); }
   // 오리가 가장 적은 레인에 자동 분산 배치
   const cnt=new Array(LANES).fill(0);
   for(const d of ducks)cnt[d.lane]++;
@@ -389,6 +429,59 @@ function spawnBug(){
 }
 function fireToken(x,y,dmg,small,aimX){
   bullets.push({x,y,vy:-110,dmg,w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674',aimX:aimX});
+}
+// 무기별 발사체 1세트 생성 (메인=scale1·aimX null, 아기=scale<1·aimX=레인중앙). 비발사형(duck/pad)은 babyFire가 따로 처리.
+function emitProjectile(eq,x,y,scale,aimX){
+  const small=scale<1, D=m=>Math.max(1,Math.round(atkDmg()*m*scale));
+  switch(eq){
+    case 'pencil':
+      bullets.push({x,y,vy:-150,dmg:D(0.75),w:2,h:small?5:8,col:'#e8e6e3',pierce:true,hit:[],aimX:aimX}); break;
+    case 'gpu':
+      if(small){ bullets.push({x,y,vy:-110,dmg:D(0.72),w:2,h:3,col:'#6ec3c9',aimX:aimX}); }
+      else for(const ox of [-laneW,0,laneW]){ const bx=x+ox; if(bx>4&&bx<W-4)bullets.push({x:bx,y,vy:-110,dmg:D(0.72),w:2,h:4,col:'#6ec3c9'}); }
+      break;
+    case 'grep':
+      bullets.push({x,y,vy:-95,dmg:D(1.15),w:2,h:small?3:4,col:'#9fd66c',homing:true}); break;
+    case 'eth':
+      bullets.push({x,y,vy:-120,dmg:D(0.92),w:2,h:small?3:5,col:'#85b7eb',chain:small?1:3,aimX:aimX}); break;
+    case 'usb': {
+      const f=small?[-95,95]:[-160,-65,65,160];
+      for(const vx of f) bullets.push({x,y,vy:-108,vx:vx,dmg:D(0.79),w:2,h:3,col:'#fac775'}); break; }
+    case 'fan':
+      bullets.push({x,y,vy:-100,dmg:D(0.8),w:2,h:small?3:5,col:'#9fe1cb',chill:true,aimX:aimX}); break;
+    case 'pin':
+      bullets.push({x,y,vy:-120,vx:(small?42:62)*(Math.random()<0.5?1:-1),dmg:D(0.78),w:3,h:3,col:'#f0c674',bounce:small?2:3,hit:[],life:4}); break;
+    case 'mouse':
+      bullets.push({x,y,vy:-110,dmg:D(0.57),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
+    case 'cpu':
+      bullets.push({x,y,vy:-110,dmg:D(0.3),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
+    default: // stream
+      bullets.push({x,y,vy:-110,dmg:D(1.0),w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674',aimX:aimX});
+  }
+}
+function weaponRate(eq){
+  switch(eq){
+    case 'mouse':return tpsVal()*2.8; case 'pencil':return tpsVal()*0.5;
+    case 'gpu':return tpsVal()*0.8; case 'cpu':return tpsVal()*0.4;
+    case 'grep':return tpsVal()*0.75; case 'eth':return tpsVal()*0.7;
+    case 'usb':return tpsVal()*0.65; case 'fan':return tpsVal()*0.95;
+    case 'pin':return tpsVal()*0.7; default:return tpsVal();
+  }
+}
+// 아기 클로드: 장착 무기에 맞는 작은 발사체. duck/pad는 발사형이 아니라 소형 토큰/펄스로 대체.
+function babyFire(eq,x,y,aimX){
+  if(eq==='pad'){ waves.push({x,y,t:0,maxR:48});
+    for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; if(Math.hypot(b.x-x,b.y-y)<=48){ b.hp-=Math.max(1,Math.round(atkDmg()*0.3)); if(b.hp<=0)killBug(b,i); } } return; }
+  if(eq==='duck'){ emitProjectile('stream',x,y,0.5,aimX); return; }
+  emitProjectile(eq,x,y,0.5,aimX);
+}
+// 체인 낙뢰: 명중한 버그 주변으로 전류 연쇄
+function chainArc(src,n,dmg){
+  const near=bugs.filter(b=>b!==src&&Math.hypot(b.x-src.x,b.y-src.y)<=42)
+                 .sort((a,b)=>Math.hypot(a.x-src.x,a.y-src.y)-Math.hypot(b.x-src.x,b.y-src.y));
+  for(let k=0;k<Math.min(n,near.length);k++){ const b=near[k];
+    b.hp-=Math.max(1,Math.round(dmg*0.62)); parts.push({x:b.x,y:b.y,vx:0,vy:0,t:0,col:'#85b7eb'});
+    if(b.hp<=0){ const idx=bugs.indexOf(b); if(idx>=0)killBug(b,idx); } }
 }
 function killBug(b,i){
   bugs.splice(i,1);
@@ -413,7 +506,7 @@ function update(dt){
   // 발사 (위로) — 무기별 패턴
   const eq=save.eq;
   if(eq==='duck'){
-    duckT+=dt; if(duckT>=3.5){ duckT=0; addDuck(); }
+    duckT+=dt; if(duckT>=3.2){ duckT=0; addDuck(); }
     for(const d of ducks){ d.pt+=dt;
       // 오리 사냥 헤엄: 자기 레인에서 가장 내려온 버그를 쫓고, 없으면 제자리로 복귀
       let prey=null;
@@ -421,9 +514,9 @@ function update(dt){
       const ty=prey?Math.min(LINE_Y-10,Math.max(HUD+14,prey.y)):H-64;
       d.y+=Math.max(-45*dt,Math.min(45*dt,ty-d.y));
       d.x=laneX(d.lane)+Math.sin(t*8+d.lane*2)*(prey?2:1);
-      if(d.pt>=0.8){ d.pt=0; let hit=false;
+      if(d.pt>=0.9){ d.pt=0; let hit=false;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
-          if(Math.hypot(b.x-d.x,b.y-d.y)<=34){ b.hp-=atkDmg()*0.6; hit=true; if(b.hp<=0)killBug(b,i); } }
+          if(Math.hypot(b.x-d.x,b.y-d.y)<=33){ b.hp-=atkDmg()*0.40; hit=true; if(b.hp<=0)killBug(b,i); } }
         if(hit){ parts.push({x:d.x,y:d.y,vx:0,vy:-14,t:0,col:'#f0c94a'}); beep(700,.06,.025,'triangle'); }
       } }
   }else if(eq==='pad'){
@@ -432,7 +525,7 @@ function update(dt){
       waves.push({x:px,y:PY,t:0,maxR:115});
       for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
         if(Math.hypot(b.x-px,b.y-PY)<=115){
-          b.hp-=Math.max(1,Math.round(atkDmg()*0.5));
+          b.hp-=Math.max(1,Math.round(atkDmg()*0.43));
           b.y=Math.max(-20,b.y-2); // 중력 반발: 위로 살짝 밀어냄
           hit=true; if(b.hp<=0)killBug(b,i); } }
       beep(120,.18,.05,'sine');
@@ -440,22 +533,11 @@ function update(dt){
     }
   }else{
     fireT-=dt;
-    if(fireT<=0){
-      if(eq==='mouse'){ fireToken(px,PY-12,Math.max(1,Math.round(atkDmg()*0.5)),true); fireT=1/(tpsVal()*2.8); }
-      else if(eq==='pencil'){
-        bullets.push({x:px,y:PY-12,vy:-150,dmg:Math.max(2,Math.round(atkDmg()*0.9)),w:2,h:8,col:'#e8e6e3',pierce:true,hit:[]});
-        fireT=1/(tpsVal()*0.5); }
-      else if(eq==='gpu'){ const d=Math.max(1,Math.round(atkDmg()*0.6));
-        for(const ox of [-laneW,0,laneW]){ const bx=px+ox;
-          if(bx>4&&bx<W-4)bullets.push({x:bx,y:PY-12,vy:-110,dmg:d,w:2,h:4,col:'#6ec3c9'}); }
-        fireT=1/(tpsVal()*0.8); }
-      else if(eq==='cpu'){ fireToken(px,PY-12,Math.max(1,Math.round(atkDmg()*0.3)),true); fireT=1/(tpsVal()*0.4); }
-      else { fireToken(px,PY-12,atkDmg(),false); fireT=1/tpsVal(); }
-    }
+    if(fireT<=0){ emitProjectile(eq,px,PY-12,1,null); fireT=1/weaponRate(eq); }
     if(eq==='cpu'){ cpuT+=dt;
       if(cpuT>=3.0){ cpuT=0; beamT=0.15;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
-          if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*4; if(b.hp<=0)killBug(b,i); } }
+          if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*4.2; if(b.hp<=0)killBug(b,i); } }
         shake=Math.max(shake,0.15); beep(1240,.15,.05,'sawtooth'); }
     }
   }
@@ -463,31 +545,38 @@ function update(dt){
   if(save.lv.agt>0){
     babyT-=dt;
     if(babyT<=0){
-      // 아기 클로드 옆구리에서 발사 → 레인 중앙으로 휘어 들어가 명중 (aimX 수렴)
+      // 아기 클로드: 옆구리에서 장착 무기의 소형 버전 발사 → 레인 중앙으로 수렴(aimX)
       const offs=[[-18,6],[18,6],[0,13]];
-      for(let n=0;n<save.lv.agt;n++) fireToken(px+offs[n][0],PY+offs[n][1]-8,Math.max(1,Math.floor(atkDmg()*0.5)),true,laneX(lane));
-      babyT=1/(tpsVal()*0.6);
+      for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane));
+      babyT=1/(tpsVal()*0.7);
     }
   }
-  // 탄환 (위로 비행)
+  // 탄환 (위로 비행) — 무기별 궤도/효과
   for(let i=bullets.length-1;i>=0;i--){ const bl=bullets[i]; bl.y+=bl.vy*dt;
-    if(bl.aimX!=null){ bl.x+=(bl.aimX-bl.x)*Math.min(1,dt*9); } // 아기 클로드 탄: 옆에서 발사 → 레인 중앙으로 수렴
-    if(bl.y<HUD-6){bullets.splice(i,1);continue}
+    if(bl.life!=null){ bl.life-=dt; if(bl.life<=0){bullets.splice(i,1);continue;} }
+    if(bl.vx){ bl.x+=bl.vx*dt;
+      if(bl.bounce!=null){ if(bl.x<3){bl.x=3;bl.vx=Math.abs(bl.vx);} else if(bl.x>W-3){bl.x=W-3;bl.vx=-Math.abs(bl.vx);} if(bl.y<HUD){bl.y=HUD;bl.vy=Math.abs(bl.vy);} }
+    }else if(bl.homing){ let tx=null,td=1e9; for(const b of bugs){ if(b.y<bl.y){ const d=Math.abs(b.x-bl.x)+Math.abs(b.y-bl.y); if(d<td){td=d;tx=b.x;} } } if(tx!=null)bl.x+=Math.max(-95*dt,Math.min(95*dt,tx-bl.x));
+    }else if(bl.aimX!=null){ bl.x+=(bl.aimX-bl.x)*Math.min(1,dt*9); } // 아기 클로드 탄: 옆 발사 → 레인 중앙 수렴
+    if(bl.y<HUD-6||bl.y>H+6||bl.x<-6||bl.x>W+6){bullets.splice(i,1);continue}
     for(let j=bugs.length-1;j>=0;j--){ const b=bugs[j],bt=BUGTYPES[b.k],
         bw=sprW(SPR[bt.spr],2)/2,bh=sprH(SPR[bt.spr],2)/2;
       if(Math.abs(bl.x-b.x)<bw+bl.w&&Math.abs(bl.y-b.y)<bh+bl.h){
-        if(bl.pierce){
-          if(bl.hit.indexOf(b)<0){ bl.hit.push(b); b.hp-=Math.max(1,bl.dmg-bt.armor); if(b.hp<=0)killBug(b,j); }
-          continue;
-        }
-        b.hp-=Math.max(1,bl.dmg-bt.armor); bullets.splice(i,1);
+        if(bl.hit){ if(bl.hit.indexOf(b)>=0)continue; bl.hit.push(b); }
+        b.hp-=Math.max(1,bl.dmg-bt.armor);
+        if(bl.chill)b.chill=Math.max(b.chill||0,1.2);
         if(b.hp<=0)killBug(b,j);
-        break;
+        if(bl.chain)chainArc(b,bl.chain,bl.dmg);
+        if(bl.pierce)continue;
+        if(bl.bounce!=null){ bl.bounce--; if(bl.bounce<=0)bullets.splice(i,1); continue; }
+        bullets.splice(i,1); break;
       } }
   }
-  // 버그 낙하 (트랙패드 중력장: 30% 감속)
+  // 버그 낙하 (트랙패드 중력장: 감속 / 쿨링팬 빙결: 둔화 + 지속뎀)
   const fallMul=save.eq==='pad'?0.68:1;
-  for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; b.y+=b.spd*fallMul*dt;
+  for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; let sp=b.spd*fallMul;
+    if(b.chill>0){ b.chill-=dt; sp*=0.45; b.hp-=3.0*dt; if(b.hp<=0){ killBug(b,i); continue; } }
+    b.y+=sp*dt;
     if(b.y>=LINE_Y){ bugs.splice(i,1); hp--; shake=0.3; beep(180,.2,.06,'sawtooth');
       floats.push({x:b.x-4,y:LINE_Y-10,txt:'-1',t:0,col:'#e24b4a'});
       if(hp<=0){ endRun(); return; } }
@@ -525,6 +614,7 @@ function render(){
   // 버그
   for(const b of bugs){ const s=SPR[BUGTYPES[b.k].spr];
     drawSprite(ctx,s,Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),2);
+    if(b.chill>0){ ctx.globalAlpha=0.4; ctx.fillStyle='#9fe1cb'; ctx.fillRect(Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),sprW(s,2),sprH(s,2)); ctx.globalAlpha=1; }
     if(b.hp<b.max){ ctx.fillStyle='#141413'; ctx.fillRect(b.x-7,b.y-sprH(s,2)/2-4,14,2);
       ctx.fillStyle='#9fd66c'; ctx.fillRect(b.x-7,b.y-sprH(s,2)/2-4,Math.max(1,14*b.hp/b.max),2); }
   }
