@@ -264,7 +264,7 @@ const WEAPONS={
   pad:   {name:'트랙패드 중력장', desc:'낙하 30% 감속 + 주변 펄스', cost:550, spr:'pad'},
   cpu:   {name:'오버클럭 CPU', desc:'2초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
   gpu:   {name:'RTX 4090', desc:'선 컬럼에 끊김없는 연속 레이저', cost:800, spr:'gpu'},
-  grep:  {name:'grep 추적기', desc:'화면 전체 위협을 칸 넘어 추적', cost:500, spr:'grep'},
+  grep:  {name:'grep 추적기', desc:'가장 앞선 버그 컬럼 즉시 조준 직선탄', cost:500, spr:'grep'},
   eth:   {name:'Cat8 랜선', desc:'명중 시 옆 칸으로 번개 점프', cost:650, spr:'eth'},
   usb:   {name:'USB 허브', desc:'앞선 버그 자동 조준 유도 미사일', cost:700, spr:'usb'},
   fan:   {name:'쿨링팬 빙결', desc:'맞은 버그 둔화 + 지속 냉각뎀', cost:600, spr:'fan'},
@@ -282,7 +282,7 @@ const BUGTYPES={
   tank:    {spr:'tank',    hp:30, spd:6,  reward:10,armor:3},
   zigzag:  {spr:'zigzag',  hp:5,  spd:18, reward:4, armor:0, zig:true},
   splitter:{spr:'splitter',hp:9,  spd:12, reward:5, armor:0, split:true},
-  runt:    {spr:'runt',    hp:1,  spd:30, reward:1, armor:0},
+  runt:    {spr:'runt',    hp:1,  spd:22, reward:1, armor:0},
 };
 // 자연 테마 5종 (진행할수록 배경·몬스터 색 변화)
 const THEMES=[
@@ -599,7 +599,7 @@ function weaponRate(eq){
     case 'gpu':return tpsVal()*0.8; case 'cpu':return tpsVal()*0.4;
     case 'grep':return tpsVal()*0.75; case 'eth':return tpsVal()*0.7;
     case 'usb':return tpsVal()*0.56; case 'fan':return tpsVal()*0.95;
-    case 'pin':return tpsVal()*0.7; case 'boom':return tpsVal()*0.5; case 'leak':return tpsVal()*1.18;
+    case 'pin':return tpsVal()*0.7; case 'boom':return tpsVal()*0.4; case 'leak':return tpsVal()*1.18;
     default:return tpsVal();
   }
 }
@@ -626,7 +626,7 @@ function chainArc(src,n,dmg){
 function killBug(b,i){
   bugs.splice(i,1);
   const bt=BUGTYPES[b.k];
-  if(bt.split){ const rb=BUGTYPES.runt; for(let s=0;s<2;s++)bugs.push({k:'runt',x:b.x+(s?13:-13),y:b.y,
+  if(bt.split){ const rb=BUGTYPES.runt; for(let s=0;s<2;s++)bugs.push({k:'runt',x:b.x+(s?8:-8),y:b.y,
     hp:rb.hp*(1+Math.min(t,150)/120),max:rb.hp*(1+Math.min(t,150)/120),spd:rb.spd*(1+Math.min(t,150)/220),phase:Math.random()*6.28}); }
   const r=bt.reward;
   runStars+=r; loc+=3;
@@ -699,15 +699,22 @@ function update(dt){
     const hx=px,hy=PY-54;
     for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; const d=Math.hypot(b.x-hx,b.y-hy);
       if(d<=64){ const pull=Math.min(0.9,dt*2.0); b.x+=(hx-b.x)*pull; b.y+=(hy-b.y)*pull*0.15; b.hp-=atkDmg()*0.72*dt; if(b.hp<=0)killBug(b,i); } }
+  }else if(eq==='cpu'){
+    // 오버클럭 CPU: 중앙 드립 없이 순수 차징 메가빔만
+    cpuT+=dt;
+    if(cpuT>=2.4){ cpuT=0; beamT=0.34;
+      for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
+        if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*3.0; if(b.hp<=0)killBug(b,i); } }
+      shake=Math.max(shake,0.18); beep(1240,.16,.05,'sawtooth'); }
+  }else if(eq==='grep'){
+    // 추적기: 가장 앞선 버그의 컬럼을 즉시 조준 → 직선 고속탄(유도 아님 → 미사일과 구분)
+    fireT-=dt;
+    if(fireT<=0){ let tx=px,my=-2; for(const b of bugs){ if(b.y>my){ my=b.y; tx=b.x; } }
+      bullets.push({x:tx,y:PY-12,vy:-215,dmg:Math.max(1,Math.round(atkDmg()*1.0)),w:2,h:7,col:'#9fd66c',grepShot:true});
+      fireT=1/weaponRate(eq); }
   }else{
     fireT-=dt;
     if(fireT<=0){ emitProjectile(eq,px,PY-12,1,null); fireT=1/weaponRate(eq); }
-    if(eq==='cpu'){ cpuT+=dt;
-      if(cpuT>=2.2){ cpuT=0; beamT=0.28;
-        for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
-          if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*2.3; if(b.hp<=0)killBug(b,i); } }
-        shake=Math.max(shake,0.15); beep(1240,.15,.05,'sawtooth'); }
-    }
   }
   // 탄환 (위로 비행) — 무기별 궤도/효과
   for(let i=bullets.length-1;i>=0;i--){ const bl=bullets[i]; bl.y+=bl.vy*dt;
@@ -740,8 +747,8 @@ function update(dt){
   const fallMul=save.eq==='pad'?0.68:1;
   for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i]; let sp=b.spd*fallMul;
     if(b.chill>0){ b.chill-=dt; sp*=0.45; b.hp-=atkDmg()*0.6*dt; if(b.hp<=0){ killBug(b,i); continue; } }
-    if(b.leak>0){ b.leak-=dt; b.hp-=atkDmg()*0.48*(1+(b.leakStk||0)*0.5)*dt; if(b.hp<=0){ killBug(b,i); continue; } }
-    if(BUGTYPES[b.k].zig){ b.x+=Math.cos(t*4.5+b.phase)*46*dt*(b.chill>0?0.45:1); b.x=Math.max(8,Math.min(W-8,b.x)); }
+    if(b.leak>0){ b.leak-=dt; b.hp-=atkDmg()*0.4*(1+(b.leakStk||0)*0.5)*dt; if(b.hp<=0){ killBug(b,i); continue; } }
+    if(BUGTYPES[b.k].zig){ b.x+=Math.cos(t*3+b.phase)*26*dt*(b.chill>0?0.45:1); b.x=Math.max(8,Math.min(W-8,b.x)); }
     b.y+=sp*dt;
     if(b.y>=LINE_Y){ bugs.splice(i,1); hp--; shake=0.3; beep(180,.2,.06,'sawtooth');
       floats.push({x:b.x-4,y:LINE_Y-10,txt:'-1',t:0,col:'#e24b4a'});
@@ -828,11 +835,13 @@ function render(){
     pts.push([z.x2,z.y2]);
     const bolt=(col,w,al)=>{ ctx.globalAlpha=al; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(Math.round(pts[0][0]),Math.round(pts[0][1])); for(let p=1;p<pts.length;p++)ctx.lineTo(Math.round(pts[p][0]),Math.round(pts[p][1])); ctx.stroke(); };
     bolt('#85b7eb',3,a*0.35); bolt('#dcebff',1,a); ctx.globalAlpha=1; }
-  // 탄환 — 무기별 시각 정체성
+  // 탄환 — 무기별 시각 정체성 (+ 부드러운 글로우)
   for(const bl of bullets){ const bx=Math.round(bl.x), by=Math.round(bl.y);
+    ctx.globalAlpha=0.22; ctx.fillStyle=bl.col; ctx.fillRect(bx-2,by-2,(bl.w||2)+3,(bl.h||3)+3); ctx.globalAlpha=1; // 글로우
     if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by+5,2,5); ctx.globalAlpha=1; } // 꼬리
     ctx.fillStyle=bl.col;
-    if(bl.duckShot){ ctx.fillRect(bx-2,by-1,4,3); ctx.fillStyle='#e08a3c'; ctx.fillRect(bx+2,by,1,1); ctx.fillStyle='#141413'; ctx.fillRect(bx-1,by-1,1,1); } // 미니 오리
+    if(bl.grepShot){ ctx.fillRect(bx-1,by-6,2,12); ctx.fillStyle='#eaffea'; ctx.fillRect(bx,by-5,1,9); } // 추적기: 고속 직선 레이저빔
+    else if(bl.duckShot){ ctx.fillRect(bx-2,by-1,4,3); ctx.fillStyle='#e08a3c'; ctx.fillRect(bx+2,by,1,1); ctx.fillStyle='#141413'; ctx.fillRect(bx-1,by-1,1,1); } // 미니 오리
     else if(bl.missile){ ctx.fillRect(bx-1,by-3,2,5); ctx.fillStyle='#fff3d0'; ctx.fillRect(bx-1,by-4,2,1); ctx.fillStyle='#e0663c'; ctx.fillRect(bx-1,by+2,2,3); } // 미사일: 몸체+노즈+화염꼬리
     else if(bl.bomb){ ctx.fillRect(bx-2,by-2,5,5); ctx.fillStyle='#854f0b'; ctx.fillRect(bx-1,by-1,3,1); } // zip 폭탄
     else if(bl.pierce){ ctx.fillRect(bx-1,by-5,2,bl.h+10); }                               // 관통: 긴 창
