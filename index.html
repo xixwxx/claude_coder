@@ -262,7 +262,7 @@ const WEAPONS={
   duck:  {name:'러버덕 군단', desc:'오리를 소환해 자동 디버깅', cost:300, spr:'duck'},
   pencil:{name:'Pencil 저격펜', desc:'느리지만 한 줄 전체 관통', cost:450, spr:'pencil'},
   pad:   {name:'트랙패드 중력장', desc:'낙하 30% 감속 + 주변 펄스', cost:550, spr:'pad'},
-  cpu:   {name:'오버클럭 CPU', desc:'3초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
+  cpu:   {name:'오버클럭 CPU', desc:'2초 차징 → 컬럼 메가빔', cost:600, spr:'cpu'},
   gpu:   {name:'RTX 4090', desc:'선 컬럼에 끊김없는 연속 레이저', cost:800, spr:'gpu'},
   grep:  {name:'grep 추적기', desc:'화면 전체 위협을 칸 넘어 추적', cost:500, spr:'grep'},
   eth:   {name:'Cat8 랜선', desc:'명중 시 옆 칸으로 번개 점프', cost:650, spr:'eth'},
@@ -330,9 +330,9 @@ function defSave(){return {stars:0,best:0,lv:{atk:0,tps:0,ctx:0},own:['stream'],
 let save = defSave();
 try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(s&&s.lv) save=Object.assign(defSave(),s); }catch(e){}
 function persist(){ try{localStorage.setItem(SAVE_KEY,JSON.stringify(save))}catch(e){} }
-const atkDmg =()=>1+save.lv.atk;
-const tpsVal =()=>2+0.4*save.lv.tps;
-const maxHp  =()=>3+save.lv.ctx*4;
+const atkDmg =()=>1+save.lv.atk*1.4;
+const tpsVal =()=>2+0.55*save.lv.tps;
+const maxHp  =()=>Math.min(5,2+save.lv.ctx);
 const ctxLabel=()=>(8*Math.pow(2,save.lv.ctx))+'K';
 
 // ---------- 사운드 ----------
@@ -550,7 +550,7 @@ function spawnBug(){
   if(t>100)pool.push('splitter');
   const k=pool[Math.floor(Math.random()*pool.length)], b=BUGTYPES[k];
   bugs.push({k,x:laneX(Math.floor(Math.random()*LANES))+(Math.random()*10-5),y:-20,
-             hp:b.hp*(1+Math.min(t,150)/95),max:b.hp*(1+Math.min(t,150)/95),spd:b.spd*(1+Math.min(t,150)/200),phase:Math.random()*6.28});
+             hp:b.hp*(1+Math.min(t,150)/120),max:b.hp*(1+Math.min(t,150)/120),spd:b.spd*(1+Math.min(t,150)/220),phase:Math.random()*6.28});
 }
 function fireToken(x,y,dmg,small,aimX){
   bullets.push({x,y,vy:-110,dmg,w:2,h:small?3:5,col:small?'#e8b25e':'#f0c674',aimX:aimX});
@@ -578,7 +578,7 @@ function emitProjectile(eq,x,y,scale,aimX){
     case 'mouse':
       bullets.push({x,y,vy:-118,dmg:D(0.61),w:2,h:3,col:'#ffcf8f',aimX:aimX}); break;
     case 'cpu':
-      bullets.push({x,y,vy:-110,dmg:D(0.3),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
+      bullets.push({x,y,vy:-110,dmg:D(0.6),w:2,h:3,col:'#e8b25e',aimX:aimX}); break;
     case 'boom': // 부메랑: 위로 갔다 가속도로 되돌아옴(왕복 2타)
       bullets.push({x,y,vy:-258,dmg:D(0.93),w:2,h:5,col:'#9fe1cb',boom:true,hit:[],aimX:aimX}); break;
     case 'leak': // 메모리 누수: 명중 시 전염 DoT 감염
@@ -627,7 +627,7 @@ function killBug(b,i){
   bugs.splice(i,1);
   const bt=BUGTYPES[b.k];
   if(bt.split){ const rb=BUGTYPES.runt; for(let s=0;s<2;s++)bugs.push({k:'runt',x:b.x+(s?13:-13),y:b.y,
-    hp:rb.hp*(1+Math.min(t,150)/95),max:rb.hp*(1+Math.min(t,150)/95),spd:rb.spd*(1+Math.min(t,150)/200),phase:Math.random()*6.28}); }
+    hp:rb.hp*(1+Math.min(t,150)/120),max:rb.hp*(1+Math.min(t,150)/120),spd:rb.spd*(1+Math.min(t,150)/220),phase:Math.random()*6.28}); }
   const r=bt.reward;
   runStars+=r; loc+=3;
   floats.push({x:b.x-6,y:b.y-10,txt:'+'+r,t:0,col:'#f0c674'});
@@ -638,7 +638,7 @@ function killBug(b,i){
 function update(dt){
   t+=dt; loc+=dt*2.5;
   if(loc>=5000){ endRun('win'); return; } // 5000 LOC = 완성(승리)
-  regenT-=dt; if(regenT<=0){ regenT=1.0; if(hp<maxHp())hp++; } // HP 재생(누수 회복 → 장기 생존 가능)
+  regenT-=dt; if(regenT<=0){ regenT=1.3; if(hp<maxHp())hp++; } // HP 재생(누수 회복)
   // 임시 기능: AUTO 자동조종 — 가장 내려온 버그의 컬럼을 추적
   if(autoPilot){ autoT-=dt;
     if(autoT<=0){ autoT=0.1; let tgt=null;
@@ -647,7 +647,7 @@ function update(dt){
         if(tc>lane)lane=Math.min(LANES-1,lane+1); else if(tc<lane)lane=Math.max(0,lane-1); } } }
   px+=(laneX(lane)-px)*Math.min(1,dt*12);
   spawnT-=dt;
-  if(spawnT<=0){ spawnBug(); spawnT=Math.max(1.05,1.6-Math.min(t,80)*0.007); }
+  if(spawnT<=0){ spawnBug(); spawnT=Math.max(1.3,1.6-Math.min(t,60)*0.005); }
   // 발사 (위로) — 무기별 패턴
   const eq=save.eq;
   if(eq==='duck'){
@@ -703,7 +703,7 @@ function update(dt){
     fireT-=dt;
     if(fireT<=0){ emitProjectile(eq,px,PY-12,1,null); fireT=1/weaponRate(eq); }
     if(eq==='cpu'){ cpuT+=dt;
-      if(cpuT>=3.0){ cpuT=0; beamT=0.28;
+      if(cpuT>=2.2){ cpuT=0; beamT=0.28;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
           if(Math.abs(b.x-px)<laneW/2){ b.hp-=atkDmg()*4.2; if(b.hp<=0)killBug(b,i); } }
         shake=Math.max(shake,0.15); beep(1240,.15,.05,'sawtooth'); }
