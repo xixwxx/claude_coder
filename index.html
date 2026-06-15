@@ -31,6 +31,12 @@
   .wcard .ds{font-size:11px;color:var(--dim);min-height:26px}
   .wcard.eq{border-color:var(--coral)}
   .wcard canvas{margin:0 auto;background:transparent}
+  .tgrid{display:grid;grid-template-columns:repeat(5,1fr);gap:8px}
+  .tcard{border:2px solid var(--line);padding:6px;text-align:center;cursor:pointer;border-radius:3px}
+  .tcard.eq{border-color:var(--coral)}
+  .tsw{height:24px;border-radius:2px;display:flex;align-items:center;justify-content:center;margin-bottom:4px}
+  .tsw i{width:8px;height:8px;border-radius:50%;display:block}
+  .tnm{font-size:12px;margin-bottom:2px}
   .tag{display:inline-block;font-size:11px;padding:2px 8px;margin-top:6px;border:1px solid var(--line)}
   .tag.on{border-color:var(--coral);color:var(--coral)}
   .tag.buy{border-color:var(--star);color:var(--star)}
@@ -280,17 +286,47 @@ const BUGTYPES={
 };
 // 자연 테마 5종 (진행할수록 배경·몬스터 색 변화)
 const THEMES=[
-  {name:'숲',   bg:'#1a241a', grid:'#243024', line:'#2e3d22', mcol:'#7cae3a'},
-  {name:'바다', bg:'#16222b', grid:'#1d2d38', line:'#22414f', mcol:'#4aa3c7'},
-  {name:'사막', bg:'#2a241a', grid:'#33301f', line:'#4a3d22', mcol:'#d8a24a'},
-  {name:'설원', bg:'#1e2630', grid:'#28323e', line:'#3a4452', mcol:'#9fcfe1'},
-  {name:'화산', bg:'#2a1817', grid:'#341d1d', line:'#4a2622', mcol:'#e0663c'},
+  {name:'숲',   bg:'#1a241a', grid:'#243024', line:'#2e3d22', mcol:'#7cae3a', acc:'#3b6d11', deco:'forest',  cost:0},
+  {name:'바다', bg:'#142430', grid:'#1d3340', line:'#22414f', mcol:'#4aa3c7', acc:'#185fa5', deco:'ocean',   cost:250},
+  {name:'사막', bg:'#2a2316', grid:'#36301d', line:'#4a3d22', mcol:'#e0a94a', acc:'#9a6a1a', deco:'desert',  cost:300},
+  {name:'설원', bg:'#1c2734', grid:'#27343f', line:'#3a4452', mcol:'#b3dded', acc:'#5dcaa5', deco:'snow',    cost:350},
+  {name:'화산', bg:'#2a1514', grid:'#3a1d1c', line:'#4a2622', mcol:'#f0824c', acc:'#a32d2d', deco:'volcano', cost:400},
 ];
-function curTheme(){ return THEMES[Math.floor(t/25)%THEMES.length]; }
+function curTheme(){ return THEMES[save.theme||0]; }
+// 반투명 배경 아트 (꾸미기용 — 저알파로 플레이 방해 X)
+function drawThemeBg(TH){
+  const d=TH.deco;
+  if(d==='forest'){
+    ctx.globalAlpha=0.16; ctx.fillStyle=TH.acc;
+    for(let i=0;i<5;i++){ const x=i*52+6; ctx.beginPath(); ctx.moveTo(x,H); ctx.lineTo(x+18,H-46); ctx.lineTo(x+36,H); ctx.closePath(); ctx.fill(); }
+    ctx.globalAlpha=0.12; ctx.fillStyle='#97c459';
+    for(let i=0;i<12;i++)ctx.fillRect(Math.round((i*71+t*9)%W),Math.round(HUD+(i*53+t*16)%(H-HUD-40)),3,3);
+  }else if(d==='ocean'){
+    ctx.globalAlpha=0.16; ctx.strokeStyle=TH.acc; ctx.lineWidth=1;
+    for(let r=0;r<5;r++){ const yy=HUD+24+r*44; ctx.beginPath(); for(let x=0;x<=W;x+=6){ const y=yy+Math.sin(x*0.07+t*1.4+r)*5; x===0?ctx.moveTo(x,y):ctx.lineTo(x,y);} ctx.stroke(); }
+    ctx.globalAlpha=0.14; ctx.fillStyle='#85b7eb';
+    for(let i=0;i<10;i++)ctx.fillRect(Math.round((i*61+7)%W),Math.round(H-((i*47+t*20)%(H-HUD))),2,2);
+  }else if(d==='desert'){
+    ctx.globalAlpha=0.18; ctx.fillStyle='#f0c674'; ctx.beginPath(); ctx.arc(W-44,HUD+30,18,0,Math.PI*2); ctx.fill();
+    ctx.globalAlpha=0.13; ctx.fillStyle=TH.acc;
+    for(let r=0;r<3;r++){ const yy=H-24-r*26; ctx.beginPath(); ctx.moveTo(0,H); for(let x=0;x<=W;x+=10)ctx.lineTo(x,yy+Math.sin(x*0.035+r*1.7)*9); ctx.lineTo(W,H); ctx.closePath(); ctx.fill(); }
+  }else if(d==='snow'){
+    ctx.globalAlpha=0.14; ctx.fillStyle=TH.acc;
+    for(let i=0;i<4;i++){ const x=i*66-12; ctx.beginPath(); ctx.moveTo(x,H); ctx.lineTo(x+36,H-54); ctx.lineTo(x+72,H); ctx.closePath(); ctx.fill(); }
+    ctx.globalAlpha=0.2; ctx.fillStyle='#e8e6e3';
+    for(let i=0;i<18;i++)ctx.fillRect(Math.round((i*47+Math.sin(t*0.8+i)*9+W)%W),Math.round(HUD+(i*37+t*24)%(H-HUD)),2,2);
+  }else if(d==='volcano'){
+    ctx.globalAlpha=0.14; ctx.strokeStyle=TH.acc; ctx.lineWidth=2;
+    for(let i=0;i<3;i++){ const cx=36+i*72; ctx.beginPath(); ctx.moveTo(cx,HUD); for(let y=HUD;y<H;y+=20)ctx.lineTo(cx+Math.sin(y*0.3+i)*7,y); ctx.stroke(); }
+    ctx.globalAlpha=0.18; ctx.fillStyle='#f0824c';
+    for(let i=0;i<12;i++)ctx.fillRect(Math.round((i*67+11)%W),Math.round(H-((i*59+t*32)%(H-HUD))),2,2);
+  }
+  ctx.globalAlpha=1;
+}
 
 // ---------- 저장 ----------
 const SAVE_KEY='claude_coder_v1';
-function defSave(){return {stars:0,best:0,lv:{atk:0,tps:0,ctx:0},own:['stream'],eq:'stream',mute:false,speed:1}}
+function defSave(){return {stars:0,best:0,lv:{atk:0,tps:0,ctx:0},own:['stream'],eq:'stream',mute:false,speed:1,theme:0,ownThemes:[0]}}
 let save = defSave();
 try{ const s=JSON.parse(localStorage.getItem(SAVE_KEY)); if(s&&s.lv) save=Object.assign(defSave(),s); }catch(e){}
 function persist(){ try{localStorage.setItem(SAVE_KEY,JSON.stringify(save))}catch(e){} }
@@ -418,7 +454,17 @@ function showMenu(){
        '<button data-s="'+k+'" '+(maxed||save.stars<cost?'disabled':'')+'>'+
        (maxed?'MAX':'★'+cost)+'</button></div>';
   }
-  h+='</div><button id="startBtn">▶ 출전 — '+WEAPONS[save.eq].name+'</button>'+
+  h+='</div>';
+  h+='<div class="sec"><h2>테마 — 꾸미기 (배경 장식)</h2><div class="tgrid">';
+  for(let i=0;i<THEMES.length;i++){ const TH=THEMES[i], own=(save.ownThemes||[0]).includes(i), eq=(save.theme||0)===i;
+    h+='<div class="tcard'+(eq?' eq':'')+'" data-th="'+i+'" style="background:'+TH.bg+'">'+
+       '<div class="tsw" style="background:'+TH.acc+'"><i style="background:'+TH.mcol+'"></i></div>'+
+       '<div class="tnm">'+TH.name+'</div>'+
+       (eq?'<span class="tag on">적용 중</span>':own?'<span class="tag">적용</span>':'<span class="tag '+(save.stars>=TH.cost?'buy':'no')+'">★'+TH.cost+'</span>')+
+       '</div>';
+  }
+  h+='</div></div>';
+  h+='<button id="startBtn">▶ 출전 — '+WEAPONS[save.eq].name+'</button>'+
      '<div class="hint">←→ 또는 A/D 이동 · 공격은 자동 · M 음소거 · ESC 나가기 · A버튼 자동관전 · 1/2/3 배속</div>';
   menuEl.innerHTML=h;
   menuEl.classList.remove('hidden');
@@ -435,6 +481,12 @@ function showMenu(){
   menuEl.querySelectorAll('button[data-s]').forEach(el=>el.onclick=()=>{
     const k=el.dataset.s,st=STATS[k],n=save.lv[k];
     if(n<st.max&&save.stars>=st.cost(n)){ save.stars-=st.cost(n); save.lv[k]++; persist(); beep(880,.1,.04); showMenu(); }
+  });
+  menuEl.querySelectorAll('.tcard').forEach(el=>el.onclick=()=>{
+    const i=+el.dataset.th, TH=THEMES[i], owned=(save.ownThemes||[0]).includes(i);
+    if(owned){ save.theme=i; }
+    else if(save.stars>=TH.cost){ save.stars-=TH.cost; (save.ownThemes=save.ownThemes||[0]).push(i); save.theme=i; beep(880,.1,.04); }
+    persist(); showMenu();
   });
   document.getElementById('startBtn').onclick=startRun;
 }
@@ -700,9 +752,6 @@ function update(dt){
   for(let i=waves.length-1;i>=0;i--){ const w=waves[i]; w.t+=dt; if(w.t>0.3)waves.splice(i,1); }
   for(let i=zaps.length-1;i>=0;i--){ const z=zaps[i]; z.t+=dt; if(z.t>0.35)zaps.splice(i,1); }
   for(let i=walls.length-1;i>=0;i--){ walls[i].life-=dt; if(walls[i].life<=0)walls.splice(i,1); }
-  // 테마 전환 배너
-  const ti=Math.floor(t/25)%THEMES.length; if(ti!==lastThemeIdx){ if(lastThemeIdx>=0)banner={txt:'ZONE: '+THEMES[ti].name,t:0}; lastThemeIdx=ti; }
-  if(banner){ banner.t+=dt; if(banner.t>1.8)banner=null; }
   if(shake>0)shake-=dt;
   if(beamT>0)beamT-=dt;
 }
@@ -712,6 +761,7 @@ function render(){
   const TH=curTheme();
   ctx.setTransform(1,0,0,1,0,0);
   ctx.fillStyle=TH.bg; ctx.fillRect(0,0,W,H);
+  drawThemeBg(TH);
   if(shake>0)ctx.translate(Math.random()*4-2,Math.random()*4-2);
   // 레인 구분선 (세로)
   ctx.fillStyle=TH.grid;
@@ -841,9 +891,6 @@ function render(){
   for(let i=0;i<5;i++){ ctx.fillRect(EXIT.x+4+i,EXIT.y+4+i,1,1); ctx.fillRect(EXIT.x+8-i,EXIT.y+4+i,1,1); }
   // 현재 모델 (좌하단)
   ctx.fillStyle='#5f5e5a'; ctx.fillText(WEAPONS[save.eq].name,6,H-11);
-  // 테마 전환 배너
-  if(banner){ ctx.globalAlpha=Math.max(0,1-banner.t/1.8); ctx.fillStyle='#e8e6e3'; ctx.font='12px Galmuri11,monospace'; ctx.textAlign='center';
-    ctx.fillText(banner.txt,W/2,H/2-6); ctx.textAlign='left'; ctx.font='8px Galmuri9,monospace'; ctx.globalAlpha=1; }
 }
 function idleRender(){
   ctx.setTransform(1,0,0,1,0,0);
