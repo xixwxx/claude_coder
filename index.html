@@ -308,14 +308,14 @@ addEventListener('resize',fit); fit();
 let state='menu';
 let bugs=[],bullets=[],ducks=[],parts=[],floats=[],waves=[],zaps=[];
 let lane=1,px=laneX(1),hp=0,loc=0,runStars=0,t=0,fireT=0,babyT=0,spawnT=0,duckT=0,shake=0;
-let cpuT=0,padT=0,beamT=0;
+let cpuT=0,padT=0,beamT=0,babyDuckT=0;
 let autoPilot=false,autoT=0; // 임시 기능: AUTO 자동조종 (테스트용 — 추후 통째로 제거 가능)
 
 function startRun(){
   if(state==='play')return;
   bugs=[];bullets=[];ducks=[];parts=[];floats=[];waves=[];zaps=[];
   lane=1;px=laneX(1);hp=maxHp();loc=0;runStars=0;t=0;fireT=0;babyT=0;spawnT=0.8;duckT=0;shake=0;
-  cpuT=0;padT=0;beamT=0;
+  cpuT=0;padT=0;beamT=0;babyDuckT=0;
   if(save.eq==='duck'){ addDuck(); }
   state='play';
   menuEl.classList.add('hidden'); deadEl.classList.add('hidden');
@@ -349,7 +349,7 @@ function showMenu(){
   state='menu'; BGM.stop(); deadEl.classList.add('hidden');
   let h='<h1>claude_coder</h1>'+
     '<div class="tops"><span>★ <b>'+save.stars+'</b></span><span>최고 <b>'+save.best+' LOC</b></span>'+
-    '<span>모델 <b>'+MODELS[save.lv.atk]+'</b></span></div>';
+    '<span>데미지 <b>'+atkDmg()+'</b></span></div>';
   h+='<div class="sec"><h2>무기 — 한 판에 1개 장착</h2><div class="wgrid">';
   for(const id in WEAPONS){
     const w=WEAPONS[id],own=save.own.includes(id),eq=save.eq===id;
@@ -364,7 +364,7 @@ function showMenu(){
   for(const k in STATS){
     const st=STATS[k],n=save.lv[k],maxed=n>=st.max,cost=st.cost(n);
     let eff='';
-    if(k==='atk') eff=MODELS[n]+' · 데미지 '+atkDmg();
+    if(k==='atk') eff='탄당 데미지 '+atkDmg();
     if(k==='tps') eff=tpsVal().toFixed(1)+' tok/s';
     if(k==='ctx') eff=ctxLabel()+' · HP '+maxHp();
     if(k==='agt') eff='아기 클로드 ×'+n;
@@ -438,11 +438,11 @@ function moveTouch(e){
 }
 
 // ---------- 런 로직 ----------
-function addDuck(){
-  if(ducks.length>=6){ ducks.shift(); }
+function addDuck(mini){
+  if(ducks.length>=10){ ducks.shift(); }
   // 플레이어가 선 레인에 소환 → 이동으로 오리 배치를 직접 유도(이동이 의미를 가짐)
-  ducks.push({lane:lane,x:laneX(lane),y:H-64,pt:0,life:7});
-  beep(520,.12,.05,'triangle');
+  ducks.push({lane:lane,x:laneX(lane),y:H-64,pt:0,life:mini?4:7,mini:!!mini});
+  beep(mini?660:520,.1,.04,'triangle');
 }
 function spawnBug(){
   let pool=['bug'];
@@ -507,7 +507,7 @@ function explode(x,y,r,dmg){
   for(let k=bugs.length-1;k>=0;k--){ const bb=bugs[k]; if(Math.hypot(bb.x-x,bb.y-y)<=r){ bb.hp-=Math.max(1,dmg-BUGTYPES[bb.k].armor); if(bb.hp<=0)killBug(bb,k); } }
   waves.push({x:x,y:y,t:0,maxR:r});
   for(let p=0;p<8;p++)parts.push({x:x,y:y,vx:Math.random()*140-70,vy:Math.random()*140-70,t:0,col:'#f0c94a'});
-  beep(150,.18,.05,'sawtooth'); shake=Math.max(shake,0.12);
+  beep(150,.18,.05,'sawtooth');
 }
 // 체인 낙뢰: 명중한 버그 주변으로 전류 연쇄
 function chainArc(src,n,dmg){
@@ -558,9 +558,9 @@ function update(dt){
       const ty=prey?Math.min(LINE_Y-10,Math.max(HUD+14,prey.y)):H-64;
       d.y+=Math.max(-50*dt,Math.min(50*dt,ty-d.y));
       d.x=laneX(d.lane)+Math.sin(t*8+d.lane*2)*(prey?2:1);
-      if(d.pt>=0.8){ d.pt=0; let hit=false;
+      if(d.pt>=0.8){ d.pt=0; let hit=false; const rad=d.mini?26:38, dm=d.mini?0.42:0.66;
         for(let i=bugs.length-1;i>=0;i--){ const b=bugs[i];
-          if(Math.hypot(b.x-d.x,b.y-d.y)<=38){ b.hp-=atkDmg()*0.66; hit=true; if(b.hp<=0)killBug(b,i); } }
+          if(Math.hypot(b.x-d.x,b.y-d.y)<=rad){ b.hp-=atkDmg()*dm; hit=true; if(b.hp<=0)killBug(b,i); } }
         if(hit){ parts.push({x:d.x,y:d.y,vx:0,vy:-14,t:0,col:'#f0c94a'}); beep(700,.06,.025,'triangle'); }
       } }
   }else if(eq==='pad'){
@@ -593,12 +593,16 @@ function update(dt){
   }
   // 아기 클로드
   if(save.lv.agt>0){
-    babyT-=dt;
-    if(babyT<=0){
-      // 아기 클로드: 옆구리에서 장착 무기의 소형 버전 발사 → 레인 중앙으로 수렴(aimX)
-      const offs=[[-18,6],[18,6],[-10,13],[10,13]], aimOff=[-8,8,-4,4];
-      for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane)+aimOff[n]);
-      babyT=1/(tpsVal()*0.7);
+    if(save.eq==='duck'){ // 아기도 메인과 똑같이 미니 오리 소환
+      babyDuckT-=dt; if(babyDuckT<=0){ for(let n=0;n<save.lv.agt;n++)addDuck(true); babyDuckT=2.6; }
+    }else{
+      babyT-=dt;
+      if(babyT<=0){
+        // 아기 클로드: 옆구리에서 장착 무기의 소형 버전 발사 → 레인 중앙으로 수렴(aimX)
+        const offs=[[-18,6],[18,6],[-10,13],[10,13]], aimOff=[-8,8,-4,4];
+        for(let n=0;n<save.lv.agt;n++) babyFire(save.eq,px+offs[n][0],PY+offs[n][1]-8,laneX(lane)+aimOff[n]);
+        babyT=1/(tpsVal()*0.7);
+      }
     }
   }
   // 탄환 (위로 비행) — 무기별 궤도/효과
@@ -666,7 +670,7 @@ function render(){
     ctx.globalAlpha=1;
   }
   // 오리 (수명 끝나갈수록 깜빡 페이드)
-  for(const d of ducks){ ctx.globalAlpha=d.life<1.5?Math.max(0.25,d.life/1.5):1; drawSprite(ctx,SPR.duck,Math.round(d.x-9),Math.round(d.y-7),2); ctx.globalAlpha=1; }
+  for(const d of ducks){ ctx.globalAlpha=d.life<1.5?Math.max(0.25,d.life/1.5):1; const sc=d.mini?1:2; drawSprite(ctx,SPR.duck,Math.round(d.x-(d.mini?4:9)),Math.round(d.y-(d.mini?3:7)),sc); ctx.globalAlpha=1; }
   // 버그
   for(const b of bugs){ const s=SPR[BUGTYPES[b.k].spr];
     drawSprite(ctx,s,Math.round(b.x-sprW(s,2)/2),Math.round(b.y-sprH(s,2)/2),2);
@@ -692,10 +696,14 @@ function render(){
   const offs=[[-18,6],[18,6],[-10,13],[10,13]];
   for(let n=0;n<save.lv.agt;n++)
     drawSprite(ctx,SPR.clawd,Math.round(px+offs[n][0]-6),Math.round(PY+offs[n][1]-4),1);
-  // 체인 번개선 (Cat8) — 굵은 글로우 + 밝은 코어, 길게 잔상
-  for(const z of zaps){ const a=Math.max(0,1-z.t/0.35), x1=Math.round(z.x1),y1=Math.round(z.y1),x2=Math.round(z.x2),y2=Math.round(z.y2);
-    ctx.globalAlpha=a*0.4; ctx.strokeStyle='#85b7eb'; ctx.lineWidth=4; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke();
-    ctx.globalAlpha=a; ctx.strokeStyle='#dcebff'; ctx.lineWidth=2; ctx.beginPath(); ctx.moveTo(x1,y1); ctx.lineTo(x2,y2); ctx.stroke(); ctx.globalAlpha=1; }
+  // 체인 번개 (Cat8) — 지그재그 꺾인 선으로 번개답게(레이저 아님)
+  for(const z of zaps){ const a=Math.max(0,1-z.t/0.35);
+    const dx=z.x2-z.x1, dy=z.y2-z.y1, len=Math.hypot(dx,dy)||1, nx=-dy/len, ny=dx/len, segs=4;
+    const pts=[[z.x1,z.y1]];
+    for(let s=1;s<segs;s++){ const f=s/segs, off=(Math.random()*2-1)*7; pts.push([z.x1+dx*f+nx*off, z.y1+dy*f+ny*off]); }
+    pts.push([z.x2,z.y2]);
+    const bolt=(col,w,al)=>{ ctx.globalAlpha=al; ctx.strokeStyle=col; ctx.lineWidth=w; ctx.beginPath(); ctx.moveTo(Math.round(pts[0][0]),Math.round(pts[0][1])); for(let p=1;p<pts.length;p++)ctx.lineTo(Math.round(pts[p][0]),Math.round(pts[p][1])); ctx.stroke(); };
+    bolt('#85b7eb',3,a*0.35); bolt('#dcebff',1,a); ctx.globalAlpha=1; }
   // 탄환 — 무기별 시각 정체성
   for(const bl of bullets){ const bx=Math.round(bl.x), by=Math.round(bl.y);
     if(bl.homing||bl.bounce!=null){ ctx.globalAlpha=0.3; ctx.fillStyle=bl.col; ctx.fillRect(bx-1,by+5,2,5); ctx.globalAlpha=1; } // 꼬리
@@ -755,7 +763,7 @@ function render(){
   ctx.fillStyle='#8a8884';
   for(let i=0;i<5;i++){ ctx.fillRect(EXIT.x+4+i,EXIT.y+4+i,1,1); ctx.fillRect(EXIT.x+8-i,EXIT.y+4+i,1,1); }
   // 현재 모델 (좌하단)
-  ctx.fillStyle='#5f5e5a'; ctx.fillText(MODELS[save.lv.atk],6,H-11);
+  ctx.fillStyle='#5f5e5a'; ctx.fillText(WEAPONS[save.eq].name,6,H-11);
 }
 function idleRender(){
   ctx.setTransform(1,0,0,1,0,0);
